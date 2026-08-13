@@ -1,30 +1,114 @@
 <mat-toolbar class="app-toolbar">
   <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
   <span>Weekly Lesson Planner</span>
+  <span class="toolbar-spacer"></span>
+  <span class="phase-label">Calendar setup · Phase 2</span>
 </mat-toolbar>
 
 <main class="app-content">
-  <mat-card appearance="outlined" class="foundation-card">
-    <mat-card-header>
-      <mat-icon mat-card-avatar aria-hidden="true">construction</mat-icon>
-      <mat-card-title>Application foundation</mat-card-title>
-      <mat-card-subtitle>Phases 0 and 1</mat-card-subtitle>
-    </mat-card-header>
+  @if (error) { <div class="notice error" role="alert">{{ error }}</div> }
+  @if (message) { <div class="notice success" role="status">{{ message }}</div> }
 
-    <mat-card-content>
-      <p>
-        The Angular shell, .NET API, and PostgreSQL persistence boundary are ready.
-        Planner features begin in Phase 2.
-      </p>
+  <section class="workspace">
+    <aside class="controls">
+      @if (config) {
+        <mat-card appearance="outlined">
+          <mat-card-header><mat-card-title>Planning range</mat-card-title></mat-card-header>
+          <mat-card-content class="form-grid">
+            <mat-form-field><mat-label>Start</mat-label><input matInput type="date" [(ngModel)]="config.planningStart"></mat-form-field>
+            <mat-form-field><mat-label>End</mat-label><input matInput type="date" [(ngModel)]="config.planningEnd"></mat-form-field>
+            <div class="weekday-group">
+              <span>Visible days</span>
+              @for (day of weekdays; track day) {
+                <mat-checkbox [checked]="config.visibleWeekdays.includes(day)" (change)="toggleWeekday(config.visibleWeekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
+              }
+            </div>
+            <div class="color-grid">
+              <label>Holiday <input type="color" [(ngModel)]="config.holidayColor"></label>
+              <label>Event <input type="color" [(ngModel)]="config.eventColor"></label>
+              <label>Exam <input type="color" [(ngModel)]="config.examColor"></label>
+            </div>
+            <button mat-flat-button (click)="saveConfig()" [disabled]="busy">Save configuration</button>
+          </mat-card-content>
+        </mat-card>
+      }
 
-      <mat-chip-set aria-label="Foundation components">
-        <mat-chip>Angular Material</mat-chip>
-        <mat-chip>.NET 10 Minimal API</mat-chip>
-        <mat-chip>PostgreSQL</mat-chip>
-      </mat-chip-set>
-    </mat-card-content>
-  </mat-card>
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>Courses</mat-card-title></mat-card-header>
+        <mat-card-content class="form-grid">
+          <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="courseDraft.name" maxlength="100"></mat-form-field>
+          <mat-form-field><mat-label>Description</mat-label><textarea matInput [(ngModel)]="courseDraft.description" rows="2"></textarea></mat-form-field>
+          <div class="weekday-group">
+            <span>Teaching days</span>
+            @for (day of weekdays; track day) {
+              <mat-checkbox [checked]="courseDraft.weekdays.includes(day)" (change)="toggleWeekday(courseDraft.weekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
+            }
+          </div>
+          <div class="button-row">
+            <button mat-flat-button (click)="saveCourse()">{{ editingCourseId ? 'Update' : 'Add' }} course</button>
+            @if (editingCourseId) { <button mat-button (click)="selectCourse(null)">Cancel</button> }
+          </div>
+          <div class="resource-list">
+            @for (course of courses; track course.id) {
+              <div><button mat-button (click)="selectCourse(course)">{{ course.name }}</button><span>{{ courseWeekdays(course) }}</span><button mat-icon-button aria-label="Delete course" (click)="deleteCourse(course)"><mat-icon>delete</mat-icon></button></div>
+            } @empty { <p>No courses yet.</p> }
+          </div>
+        </mat-card-content>
+      </mat-card>
 
-  <router-outlet />
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>Global holiday / event</mat-card-title></mat-card-header>
+        <mat-card-content class="form-grid">
+          <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="markerDraft.date"></mat-form-field>
+          <mat-form-field><mat-label>Type</mat-label><mat-select [(ngModel)]="markerDraft.type"><mat-option [value]="markerTypes.Holiday">Holiday</mat-option><mat-option [value]="markerTypes.Event">Event</mat-option></mat-select></mat-form-field>
+          <mat-form-field><mat-label>Label</mat-label><input matInput [(ngModel)]="markerDraft.label" maxlength="200"></mat-form-field>
+          <div class="button-row"><button mat-flat-button (click)="saveMarker()">{{ editingMarkerId ? 'Update' : 'Add' }} marker</button>@if (editingMarkerId) { <button mat-button (click)="clearMarker()">Cancel</button> }</div>
+          <div class="resource-list">
+            @for (marker of markers; track marker.id) { <div><button mat-button (click)="editMarker(marker)">{{ marker.date }} · {{ markerTypeName(marker.type) }} · {{ marker.label || 'Unlabelled' }}</button><button mat-icon-button aria-label="Delete marker" (click)="deleteMarker(marker)"><mat-icon>delete</mat-icon></button></div> }
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <mat-card appearance="outlined">
+        <mat-card-header><mat-card-title>Course exam</mat-card-title></mat-card-header>
+        <mat-card-content class="form-grid">
+          @if (!selectedCourseId) { <p>Select a course above the calendar to manage its exams.</p> }
+          <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="examDraft.date" [disabled]="!selectedCourseId"></mat-form-field>
+          <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId"></mat-form-field>
+          <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
+          <div class="resource-list">
+            @for (exam of exams; track exam.id) { <div><button mat-button (click)="editExam(exam)">{{ exam.date }} · {{ exam.name }}</button><button mat-icon-button aria-label="Delete exam" (click)="deleteExam(exam)"><mat-icon>delete</mat-icon></button></div> }
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </aside>
+
+    <section class="calendar-panel" aria-label="School-year calendar">
+      <div class="calendar-heading">
+        <div><h1>School-year calendar</h1><p>ISO 8601 weeks · global markers apply to every course</p></div>
+        <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All courses</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+      </div>
+
+      @if (calendar) {
+        <div class="calendar-scroll">
+          <table>
+            <thead><tr><th class="week-column">ISO week</th>@for (day of calendar.visibleWeekdays; track day) { <th>{{ weekdayName(day) }}</th> }</tr></thead>
+            <tbody>
+              @for (week of calendar.weeks; track week.isoYear + '-' + week.isoWeek) {
+                <tr><th class="week-column">{{ week.isoYear }}-W{{ week.isoWeek.toString().padStart(2, '0') }}</th>
+                  @for (day of week.days; track day.date) {
+                    <td [class.outside-range]="!day.isInPlanningRange" [class.course-day]="day.isCourseDay" [class.fixed-day]="day.state !== states.Normal" [ngStyle]="dayStyle(day)">
+                      <span class="date">{{ day.date | date:'d MMM':'UTC' }}</span>
+                      @if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
+                      @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
+                    </td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else { <p>Loading calendar…</p> }
+    </section>
+  </section>
 </main>
-

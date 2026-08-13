@@ -3,10 +3,12 @@ using Microsoft.EntityFrameworkCore;
 using WeeklyLessonPlanner.Core.Planning;
 using WeeklyLessonPlanner.Infrastructure;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
+using WeeklyLessonPlanner.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructure(builder.Configuration);
 
@@ -48,6 +50,8 @@ app.MapGet("/api/system/status", async (
     .WithName("GetSystemStatus")
     .WithTags("System");
 
+app.MapCalendarEndpoints();
+
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("live")
@@ -61,4 +65,3 @@ app.MapHealthChecks("/health/ready", new HealthCheckOptions
 app.Run();
 
 public partial class Program;
-

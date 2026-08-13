@@ -18,4 +18,4 @@ frontend/coverage/
 # IDE and operating-system files
 .idea/
 .DS_Store
-
+.~lock.*#

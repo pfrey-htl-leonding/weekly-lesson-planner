@@ -199,6 +199,8 @@ Use text/icons in addition to colour so the day states remain distinguishable fo
 
 ### Phase 2 — Data model, configuration, and calendar
 
+**Implementation status:** completed and verified on 2026-08-13.
+
 - Implement EF entities, mappings, constraints, indexes, and initial migration.
 - Implement configuration and inclusive planning-range APIs.
 - Generate deterministic ISO 8601 week/calendar views.

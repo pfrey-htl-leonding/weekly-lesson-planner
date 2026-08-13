@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using WeeklyLessonPlanner.Core.Planning;
+using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Infrastructure;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
 
@@ -28,6 +29,6 @@ public sealed class ServiceRegistrationTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<PlannerDbContext>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IPlanningService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ICalendarService>());
     }
 }
-

@@ -10,5 +10,4 @@ See the README in each directory for focused commands. The complete production-s
 
 ## Phase boundary
 
-Phases 0 and 1 provide the executable application foundation only. Calendar, course, topic, marker, and scheduling behavior remain intentionally deferred to their phases in `plan.md`. Confirmed scheduling semantics are preserved as skipped executable specifications under `backend/tests/WeeklyLessonPlanner.UnitTests/Planning`.
-
+Phases 0 through 2 are implemented. The application now persists configuration, courses and weekdays, global holiday/event markers, course exams, and a deterministic ISO-week calendar projection. Topic management and scheduling behavior remain intentionally deferred to Phases 3 and 4 in `plan.md`. Confirmed scheduling semantics are preserved as skipped executable specifications under `backend/tests/WeeklyLessonPlanner.UnitTests/Planning`.

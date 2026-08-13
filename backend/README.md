@@ -31,3 +31,12 @@ Set `PLANNER_DB_CONNECTION` and use `scripts/add-migration.sh <Name>` or `script
 
 Set `TEST_POSTGRES_CONNECTION` to run the provider integration tests; otherwise those tests report as skipped.
 
+## Phase 2 API
+
+- `GET/PUT /api/config`
+- `GET/POST/PUT/DELETE /api/courses`
+- `GET/POST/PUT/DELETE /api/global-markers`
+- `GET/POST/PUT/DELETE /api/course-exams`
+- `GET /api/calendar?courseId={id}`
+
+Marker and exam writes go through `IPlanningService`. Invalid requests use HTTP 400 Problem Details; exclusivity and destructive-change conflicts use HTTP 409 Problem Details.

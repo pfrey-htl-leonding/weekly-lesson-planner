@@ -1,3 +1,5 @@
+using WeeklyLessonPlanner.Core.Calendar;
+
 namespace WeeklyLessonPlanner.Core.Planning;
 
 /// <summary>
@@ -7,5 +9,20 @@ namespace WeeklyLessonPlanner.Core.Planning;
 public interface IPlanningService
 {
     Task<PlanningServiceStatus> GetStatusAsync(CancellationToken cancellationToken = default);
+    Task<GlobalDayMarkerDto> CreateGlobalMarkerAsync(
+        SaveGlobalDayMarkerCommand command,
+        CancellationToken cancellationToken = default);
+    Task<GlobalDayMarkerDto?> UpdateGlobalMarkerAsync(
+        Guid id,
+        SaveGlobalDayMarkerCommand command,
+        CancellationToken cancellationToken = default);
+    Task<bool> DeleteGlobalMarkerAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<CourseExamDto> CreateCourseExamAsync(
+        SaveCourseExamCommand command,
+        CancellationToken cancellationToken = default);
+    Task<CourseExamDto?> UpdateCourseExamAsync(
+        Guid id,
+        SaveCourseExamCommand command,
+        CancellationToken cancellationToken = default);
+    Task<bool> DeleteCourseExamAsync(Guid id, CancellationToken cancellationToken = default);
 }
-

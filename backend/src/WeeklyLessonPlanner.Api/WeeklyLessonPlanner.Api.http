@@ -5,9 +5,23 @@ Accept: application/json
 
 ###
 
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/config
+Accept: application/json
+
+###
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/courses
+Accept: application/json
+
+###
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/calendar
+Accept: application/json
+
+###
+
 GET {{WeeklyLessonPlanner.Api_HostAddress}}/health/live
 
 ###
 
 GET {{WeeklyLessonPlanner.Api_HostAddress}}/health/ready
-

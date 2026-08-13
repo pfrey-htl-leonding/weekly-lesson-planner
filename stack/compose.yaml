@@ -1,0 +1,63 @@
+name: weekly-lesson-planner
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-weekly_lesson_planner}
+      POSTGRES_USER: ${POSTGRES_USER:-weekly_lesson_planner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in stack/.env}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 5s
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: stack/backend.Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_HTTP_PORTS: 8080
+      ConnectionStrings__PlannerDatabase: >-
+        Host=db;Port=5432;Database=${POSTGRES_DB:-weekly_lesson_planner};Username=${POSTGRES_USER:-weekly_lesson_planner};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in stack/.env}
+      Database__ApplyMigrations: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    ports:
+      - "127.0.0.1:${API_PORT:-5080}:8080"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: stack/frontend.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 5s
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

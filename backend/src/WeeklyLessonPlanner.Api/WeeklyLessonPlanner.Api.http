@@ -1,0 +1,13 @@
+@WeeklyLessonPlanner.Api_HostAddress = http://localhost:5080
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/system/status
+Accept: application/json
+
+###
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/health/live
+
+###
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/health/ready
+

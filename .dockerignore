@@ -1,0 +1,11 @@
+.git
+.gitignore
+**/bin
+**/obj
+frontend/.angular
+frontend/coverage
+frontend/dist
+frontend/node_modules
+stack/.env
+TestResults
+

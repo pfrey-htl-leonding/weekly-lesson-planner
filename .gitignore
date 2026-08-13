@@ -1,0 +1,21 @@
+# Local environment and secrets
+.env
+stack/.env
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+TestResults/
+
+# Angular / Node
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+
+# IDE and operating-system files
+.idea/
+.DS_Store
+

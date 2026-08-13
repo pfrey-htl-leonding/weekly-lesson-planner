@@ -1,0 +1,27 @@
+:host {
+  display: block;
+  min-height: 100%;
+}
+
+.app-toolbar {
+  gap: 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-content {
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 80rem;
+  padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+.foundation-card {
+  max-width: 44rem;
+}
+
+mat-card-content {
+  padding-top: 1rem;
+}
+

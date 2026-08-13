@@ -1,0 +1,30 @@
+<mat-toolbar class="app-toolbar">
+  <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
+  <span>Weekly Lesson Planner</span>
+</mat-toolbar>
+
+<main class="app-content">
+  <mat-card appearance="outlined" class="foundation-card">
+    <mat-card-header>
+      <mat-icon mat-card-avatar aria-hidden="true">construction</mat-icon>
+      <mat-card-title>Application foundation</mat-card-title>
+      <mat-card-subtitle>Phases 0 and 1</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <p>
+        The Angular shell, .NET API, and PostgreSQL persistence boundary are ready.
+        Planner features begin in Phase 2.
+      </p>
+
+      <mat-chip-set aria-label="Foundation components">
+        <mat-chip>Angular Material</mat-chip>
+        <mat-chip>.NET 10 Minimal API</mat-chip>
+        <mat-chip>PostgreSQL</mat-chip>
+      </mat-chip-set>
+    </mat-card-content>
+  </mat-card>
+
+  <router-outlet />
+</main>
+

@@ -54,6 +54,13 @@ export interface GlobalDayMarker {
 
 export type SaveGlobalDayMarker = Omit<GlobalDayMarker, 'id'>;
 
+export interface SaveGlobalDayMarkerRange {
+  from: string;
+  until: string;
+  type: GlobalDayMarkerType;
+  label: string | null;
+}
+
 export interface CourseExam {
   id: string;
   courseId: string;
@@ -70,6 +77,16 @@ export interface CalendarDay {
   isCourseDay: boolean;
   state: EffectiveDayState;
   label: string | null;
+  scheduledTopics: ScheduledTopic[];
+}
+
+export interface ScheduledTopic {
+  assignmentId: string;
+  topicInstanceId: string;
+  courseId: string;
+  courseName: string;
+  heading: string;
+  description: string;
 }
 
 export interface CalendarWeek {
@@ -98,6 +115,9 @@ export class CalendarApi {
   deleteCourse(id: string): Observable<void> { return this.api.delete(`/api/courses/${id}`); }
   getMarkers(): Observable<GlobalDayMarker[]> { return this.api.get('/api/global-markers'); }
   createMarker(command: SaveGlobalDayMarker): Observable<GlobalDayMarker> { return this.api.post('/api/global-markers', command); }
+  createMarkerRange(command: SaveGlobalDayMarkerRange): Observable<GlobalDayMarker[]> {
+    return this.api.post('/api/global-markers/range', command);
+  }
   updateMarker(id: string, command: SaveGlobalDayMarker): Observable<GlobalDayMarker> { return this.api.put(`/api/global-markers/${id}`, command); }
   deleteMarker(id: string): Observable<void> { return this.api.delete(`/api/global-markers/${id}`); }
   getExams(courseId?: string): Observable<CourseExam[]> {

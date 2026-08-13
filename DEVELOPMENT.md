@@ -10,4 +10,4 @@ See the README in each directory for focused commands. The complete production-s
 
 ## Phase boundary
 
-Phases 0 through 2 are implemented. The application now persists configuration, courses and weekdays, global holiday/event markers, course exams, and a deterministic ISO-week calendar projection. Topic management and scheduling behavior remain intentionally deferred to Phases 3 and 4 in `plan.md`. Confirmed scheduling semantics are preserved as skipped executable specifications under `backend/tests/WeeklyLessonPlanner.UnitTests/Planning`.
+Phases 0 through 3 are implemented. The application persists configuration, courses and weekdays, global holiday/event markers, course exams, reusable topic definitions and instances, and a deterministic ISO-week calendar projection. Topic placement and shifting remain intentionally deferred to Phase 4 in `plan.md`. Confirmed scheduling semantics are preserved as skipped executable specifications under `backend/tests/WeeklyLessonPlanner.UnitTests/Planning`.

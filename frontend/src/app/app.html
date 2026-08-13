@@ -2,7 +2,7 @@
   <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
   <span>Weekly Lesson Planner</span>
   <span class="toolbar-spacer"></span>
-  <span class="phase-label">Calendar setup · Phase 2</span>
+  <span class="phase-label">Topics and calendar · Phase 3</span>
 </mat-toolbar>
 
 <main class="app-content">
@@ -11,82 +11,180 @@
 
   <section class="workspace">
     <aside class="controls">
-      @if (config) {
-        <mat-card appearance="outlined">
-          <mat-card-header><mat-card-title>Planning range</mat-card-title></mat-card-header>
-          <mat-card-content class="form-grid">
-            <mat-form-field><mat-label>Start</mat-label><input matInput type="date" [(ngModel)]="config.planningStart"></mat-form-field>
-            <mat-form-field><mat-label>End</mat-label><input matInput type="date" [(ngModel)]="config.planningEnd"></mat-form-field>
-            <div class="weekday-group">
-              <span>Visible days</span>
-              @for (day of weekdays; track day) {
-                <mat-checkbox [checked]="config.visibleWeekdays.includes(day)" (change)="toggleWeekday(config.visibleWeekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
+      <mat-card appearance="outlined" class="management-card">
+        <mat-tab-group dynamicHeight animationDuration="150ms">
+          <mat-tab label="Topic management">
+            <div class="tab-content form-grid">
+              @if (!selectedCourseId) {
+                <p>Select a course in the Course view to manage its topics.</p>
+              }
+
+              <h3>Unplanned topic instances</h3>
+              <mat-form-field>
+                <mat-label>Search topic list</mat-label>
+                <mat-icon matPrefix aria-hidden="true">search</mat-icon>
+                <input matInput [(ngModel)]="topicSearch" [disabled]="!selectedCourseId">
+              </mat-form-field>
+              <div class="topic-instance-list">
+                @for (instance of visibleUnplannedTopics(); track instance.id) {
+                  <article class="topic-instance">
+                    <div>
+                      <strong>{{ instance.heading }}</strong>
+                      <p [title]="instance.description">{{ instance.description || 'No description' }}</p>
+                    </div>
+                    <div class="topic-actions">
+                      <button mat-icon-button class="compact-icon" [attr.aria-label]="'Edit topic ' + instance.heading" (click)="editTopic(instance)"><mat-icon>edit</mat-icon></button>
+                      <button mat-icon-button class="compact-icon" [attr.aria-label]="'Delete one unplanned instance of ' + instance.heading" (click)="deleteTopicInstance(instance)"><mat-icon>delete</mat-icon></button>
+                    </div>
+                  </article>
+                } @empty { <p>No matching unplanned topic instances.</p> }
+              </div>
+
+              <div class="section-divider"></div>
+              <h3>{{ editingTopicId ? 'Edit shared topic' : 'Add topic' }}</h3>
+              <mat-form-field>
+                <mat-label>Heading</mat-label>
+                <input matInput [(ngModel)]="topicDraft.heading" maxlength="200" [disabled]="!selectedCourseId">
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>Description</mat-label>
+                <textarea matInput [(ngModel)]="topicDraft.description" rows="3" maxlength="4000" [disabled]="!selectedCourseId"></textarea>
+              </mat-form-field>
+              <div class="button-row">
+                <button mat-flat-button (click)="saveTopic()" [disabled]="!selectedCourseId || busy">{{ editingTopicId ? 'Update' : 'Add' }} topic</button>
+                @if (editingTopicId) { <button mat-button (click)="clearTopic()">Cancel</button> }
+              </div>
+
+              <h3>Shared definitions</h3>
+              <div class="resource-list topic-definitions">
+                @for (topic of topics; track topic.id) {
+                  <div>
+                    <button mat-button (click)="editTopic(topic)">{{ topic.heading }}</button>
+                    <span>{{ topic.unplannedInstanceCount }} unplanned · {{ topic.plannedInstanceCount }} planned</span>
+                    <button mat-icon-button [attr.aria-label]="'Delete topic definition ' + topic.heading" (click)="deleteTopic(topic)"><mat-icon>delete_forever</mat-icon></button>
+                  </div>
+                } @empty { <p>No topic definitions for this course.</p> }
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Course exam">
+            <div class="tab-content form-grid">
+              @if (!selectedCourseId) { <p>Select a course in the Course view to manage its exams.</p> }
+              <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="examDraft.date" [disabled]="!selectedCourseId"></mat-form-field>
+              <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId"></mat-form-field>
+              <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
+              <div class="resource-list">
+                @for (exam of exams; track exam.id) { <div><button mat-button (click)="editExam(exam)">{{ exam.date }} · {{ exam.name }}</button><button mat-icon-button aria-label="Delete exam" (click)="deleteExam(exam)"><mat-icon>delete</mat-icon></button></div> }
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Global holiday">
+            <div class="tab-content form-grid">
+              <div class="date-range-fields">
+                <mat-form-field><mat-label>On/From</mat-label><input matInput type="date" [(ngModel)]="markerDraft.date"></mat-form-field>
+                <mat-form-field><mat-label>Until</mat-label><input matInput type="date" [(ngModel)]="markerDraft.until"></mat-form-field>
+              </div>
+              <mat-form-field><mat-label>Type</mat-label><mat-select [(ngModel)]="markerDraft.type"><mat-option [value]="markerTypes.Holiday">Holiday</mat-option><mat-option [value]="markerTypes.Event">Event</mat-option></mat-select></mat-form-field>
+              <mat-form-field><mat-label>Label</mat-label><input matInput [(ngModel)]="markerDraft.label" maxlength="200"></mat-form-field>
+              <div class="button-row marker-actions">
+                <button mat-flat-button (click)="saveMarker()" [disabled]="busy">{{ editingMarkerId ? 'Update' : 'Add' }} marker</button>
+                @if (!editingMarkerId) {
+                  <button mat-stroked-button (click)="saveMarkerRange()" [disabled]="busy || !markerDraft.date || !markerDraft.until">Add marker range</button>
+                }
+                <button mat-button (click)="clearMarker()">Clear</button>
+              </div>
+              <div class="resource-list">
+                @for (marker of markers; track marker.id) { <div><button mat-button (click)="editMarker(marker)">{{ marker.date }} · {{ markerTypeName(marker.type) }} · {{ marker.label || 'Unlabelled' }}</button><button mat-icon-button aria-label="Delete marker" (click)="deleteMarker(marker)"><mat-icon>delete</mat-icon></button></div> }
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Courses">
+            <div class="tab-content form-grid">
+              <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="courseDraft.name" maxlength="100"></mat-form-field>
+              <mat-form-field><mat-label>Description</mat-label><textarea matInput [(ngModel)]="courseDraft.description" rows="2"></textarea></mat-form-field>
+              <div class="weekday-group">
+                <span>Teaching days</span>
+                @for (day of weekdays; track day) {
+                  <mat-checkbox [checked]="courseDraft.weekdays.includes(day)" (change)="toggleWeekday(courseDraft.weekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
+                }
+              </div>
+              <div class="button-row">
+                <button mat-flat-button (click)="saveCourse()" [disabled]="busy">{{ editingCourseId ? 'Update' : 'Add' }} course</button>
+                @if (editingCourseId) { <button mat-button (click)="selectCourse(null)">Cancel</button> }
+              </div>
+              <div class="resource-list">
+                @for (course of courses; track course.id) {
+                  <div><button mat-button (click)="selectCourse(course)">{{ course.name }}</button><span>{{ courseWeekdays(course) }}</span><button mat-icon-button aria-label="Delete course" (click)="deleteCourse(course)"><mat-icon>delete</mat-icon></button></div>
+                } @empty { <p>No courses yet.</p> }
+              </div>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="Planning range">
+            <div class="tab-content form-grid">
+              @if (config) {
+                <mat-form-field><mat-label>Start</mat-label><input matInput type="date" [(ngModel)]="config.planningStart"></mat-form-field>
+                <mat-form-field><mat-label>End</mat-label><input matInput type="date" [(ngModel)]="config.planningEnd"></mat-form-field>
+                <button mat-flat-button (click)="saveConfig()" [disabled]="busy">Save planning range</button>
               }
             </div>
-            <div class="color-grid">
-              <label>Holiday <input type="color" [(ngModel)]="config.holidayColor"></label>
-              <label>Event <input type="color" [(ngModel)]="config.eventColor"></label>
-              <label>Exam <input type="color" [(ngModel)]="config.examColor"></label>
+          </mat-tab>
+
+          <mat-tab label="Options">
+            <div class="tab-content form-grid">
+              @if (config) {
+                <div class="weekday-group">
+                  <span>Visible calendar days</span>
+                  @for (day of weekdays; track day) {
+                    <mat-checkbox [checked]="config.visibleWeekdays.includes(day)" (change)="toggleWeekday(config.visibleWeekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
+                  }
+                </div>
+                <div class="color-grid">
+                  <label>Holiday <input type="color" [(ngModel)]="config.holidayColor"></label>
+                  <label>Event <input type="color" [(ngModel)]="config.eventColor"></label>
+                  <label>Exam <input type="color" [(ngModel)]="config.examColor"></label>
+                </div>
+                <button mat-flat-button (click)="saveConfig()" [disabled]="busy">Save options</button>
+              }
             </div>
-            <button mat-flat-button (click)="saveConfig()" [disabled]="busy">Save configuration</button>
-          </mat-card-content>
-        </mat-card>
-      }
+          </mat-tab>
 
-      <mat-card appearance="outlined">
-        <mat-card-header><mat-card-title>Courses</mat-card-title></mat-card-header>
-        <mat-card-content class="form-grid">
-          <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="courseDraft.name" maxlength="100"></mat-form-field>
-          <mat-form-field><mat-label>Description</mat-label><textarea matInput [(ngModel)]="courseDraft.description" rows="2"></textarea></mat-form-field>
-          <div class="weekday-group">
-            <span>Teaching days</span>
-            @for (day of weekdays; track day) {
-              <mat-checkbox [checked]="courseDraft.weekdays.includes(day)" (change)="toggleWeekday(courseDraft.weekdays, day, $event.checked)">{{ weekdayName(day) }}</mat-checkbox>
-            }
-          </div>
-          <div class="button-row">
-            <button mat-flat-button (click)="saveCourse()">{{ editingCourseId ? 'Update' : 'Add' }} course</button>
-            @if (editingCourseId) { <button mat-button (click)="selectCourse(null)">Cancel</button> }
-          </div>
-          <div class="resource-list">
-            @for (course of courses; track course.id) {
-              <div><button mat-button (click)="selectCourse(course)">{{ course.name }}</button><span>{{ courseWeekdays(course) }}</span><button mat-icon-button aria-label="Delete course" (click)="deleteCourse(course)"><mat-icon>delete</mat-icon></button></div>
-            } @empty { <p>No courses yet.</p> }
-          </div>
-        </mat-card-content>
-      </mat-card>
+          <mat-tab label="Data import/export">
+            <div class="tab-content form-grid">
+              <mat-form-field class="data-transfer-field">
+                <mat-label>CSV data</mat-label>
+                <textarea matInput [(ngModel)]="dataTransferText" rows="12" placeholder="Name;Optional description"></textarea>
+                <mat-hint>One record per line: name;optional description. Matching names are updated.</mat-hint>
+              </mat-form-field>
 
-      <mat-card appearance="outlined">
-        <mat-card-header><mat-card-title>Global holiday / event</mat-card-title></mat-card-header>
-        <mat-card-content class="form-grid">
-          <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="markerDraft.date"></mat-form-field>
-          <mat-form-field><mat-label>Type</mat-label><mat-select [(ngModel)]="markerDraft.type"><mat-option [value]="markerTypes.Holiday">Holiday</mat-option><mat-option [value]="markerTypes.Event">Event</mat-option></mat-select></mat-form-field>
-          <mat-form-field><mat-label>Label</mat-label><input matInput [(ngModel)]="markerDraft.label" maxlength="200"></mat-form-field>
-          <div class="button-row"><button mat-flat-button (click)="saveMarker()">{{ editingMarkerId ? 'Update' : 'Add' }} marker</button>@if (editingMarkerId) { <button mat-button (click)="clearMarker()">Cancel</button> }</div>
-          <div class="resource-list">
-            @for (marker of markers; track marker.id) { <div><button mat-button (click)="editMarker(marker)">{{ marker.date }} · {{ markerTypeName(marker.type) }} · {{ marker.label || 'Unlabelled' }}</button><button mat-icon-button aria-label="Delete marker" (click)="deleteMarker(marker)"><mat-icon>delete</mat-icon></button></div> }
-          </div>
-        </mat-card-content>
-      </mat-card>
+              <mat-radio-group class="data-transfer-kind" [(ngModel)]="dataTransferKind" aria-label="Data type">
+                <mat-radio-button value="topics">Topics</mat-radio-button>
+                <mat-radio-button value="courses">Courses</mat-radio-button>
+              </mat-radio-group>
 
-      <mat-card appearance="outlined">
-        <mat-card-header><mat-card-title>Course exam</mat-card-title></mat-card-header>
-        <mat-card-content class="form-grid">
-          @if (!selectedCourseId) { <p>Select a course above the calendar to manage its exams.</p> }
-          <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="examDraft.date" [disabled]="!selectedCourseId"></mat-form-field>
-          <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId"></mat-form-field>
-          <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
-          <div class="resource-list">
-            @for (exam of exams; track exam.id) { <div><button mat-button (click)="editExam(exam)">{{ exam.date }} · {{ exam.name }}</button><button mat-icon-button aria-label="Delete exam" (click)="deleteExam(exam)"><mat-icon>delete</mat-icon></button></div> }
-          </div>
-        </mat-card-content>
+              @if (dataTransferKind === 'topics') {
+                <p class="field-note">Topics apply to the course selected in Course view.</p>
+              } @else {
+                <p class="field-note">Imported courses use the visible weekdays configured in Options.</p>
+              }
+
+              <div class="button-row">
+                <button mat-flat-button (click)="exportData()" [disabled]="busy">Export</button>
+                <button mat-stroked-button (click)="importData()" [disabled]="busy">Import</button>
+              </div>
+            </div>
+          </mat-tab>
+        </mat-tab-group>
       </mat-card>
     </aside>
 
     <section class="calendar-panel" aria-label="School-year calendar">
       <div class="calendar-heading">
         <div><h1>School-year calendar</h1><p>ISO 8601 weeks · global markers apply to every course</p></div>
-        <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All courses</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+        <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
       </div>
 
       @if (calendar) {
@@ -98,9 +196,16 @@
                 <tr><th class="week-column">{{ week.isoYear }}-W{{ week.isoWeek.toString().padStart(2, '0') }}</th>
                   @for (day of week.days; track day.date) {
                     <td [class.outside-range]="!day.isInPlanningRange" [class.course-day]="day.isCourseDay" [class.fixed-day]="day.state !== states.Normal" [ngStyle]="dayStyle(day)">
-                      <span class="date">{{ day.date | date:'d MMM':'UTC' }}</span>
+                      <span class="date">{{ calendarDateLabel(day.date) }}</span>
                       @if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
                       @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
+                      @for (topic of day.scheduledTopics; track topic.assignmentId) {
+                        <article class="scheduled-topic">
+                          @if (!selectedCourseId) { <small>{{ topic.courseName }}</small> }
+                          <strong>{{ topic.heading }}</strong>
+                          @if (topic.description) { <span [title]="topic.description">{{ topic.description }}</span> }
+                        </article>
+                      }
                     </td>
                   }
                 </tr>

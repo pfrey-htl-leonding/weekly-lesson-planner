@@ -53,6 +53,36 @@ public sealed class Phase2CalendarTests
 
             await planning.DeleteCourseExamAsync(exam.Id);
             await planning.DeleteGlobalMarkerAsync(marker.Id);
+
+            var rangeStart = new DateOnly(2026, 11, 2);
+            var rangeEnd = rangeStart.AddDays(2);
+            var blockingExam = await planning.CreateCourseExamAsync(new(
+                course.Id,
+                rangeStart.AddDays(1),
+                "Range conflict"));
+            await Assert.ThrowsAsync<PlanningConflictException>(() =>
+                planning.CreateGlobalMarkerRangeAsync(new(
+                    rangeStart,
+                    rangeEnd,
+                    GlobalDayMarkerType.Holiday,
+                    "Autumn break")));
+            Assert.False(await dbContext.GlobalDayMarkers.AnyAsync(
+                item => item.Date >= rangeStart && item.Date <= rangeEnd));
+
+            await planning.DeleteCourseExamAsync(blockingExam.Id);
+            var range = await planning.CreateGlobalMarkerRangeAsync(new(
+                rangeStart,
+                rangeEnd,
+                GlobalDayMarkerType.Holiday,
+                "Autumn break"));
+            Assert.Equal(3, range.Count);
+            Assert.Equal(
+                [rangeStart, rangeStart.AddDays(1), rangeEnd],
+                range.Select(item => item.Date));
+            foreach (var rangeMarker in range)
+            {
+                await planning.DeleteGlobalMarkerAsync(rangeMarker.Id);
+            }
         }
         finally
         {

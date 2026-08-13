@@ -5,6 +5,8 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using WeeklyLessonPlanner.Core.Planning;
 using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Infrastructure.Calendar;
+using WeeklyLessonPlanner.Core.Topics;
+using WeeklyLessonPlanner.Infrastructure.Topics;
 using WeeklyLessonPlanner.Infrastructure.Health;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
 using WeeklyLessonPlanner.Infrastructure.Planning;
@@ -31,6 +33,7 @@ public static class DependencyInjection
 
         services.AddScoped<IPlanningService, PlanningService>();
         services.AddScoped<ICalendarService, CalendarService>();
+        services.AddScoped<ITopicService, TopicService>();
 
         services
             .AddHealthChecks()

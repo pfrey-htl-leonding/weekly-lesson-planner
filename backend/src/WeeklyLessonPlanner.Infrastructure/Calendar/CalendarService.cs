@@ -199,7 +199,36 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
                 .ToDictionary(item => item.Date)
             : new Dictionary<DateOnly, CourseExamDto>();
 
-        return CalendarBuilder.Build(config, courseId, courseWeekdays, markers, exams);
+        var assignmentQuery = dbContext.TopicAssignments
+            .AsNoTracking()
+            .Where(item => item.Date >= config.PlanningStart && item.Date <= config.PlanningEnd);
+        if (courseId.HasValue)
+        {
+            assignmentQuery = assignmentQuery.Where(item => item.CourseId == courseId.Value);
+        }
+
+        var assignments = await assignmentQuery
+            .OrderBy(item => item.TopicInstance.Topic.Course.Name)
+            .ThenBy(item => item.TopicInstance.Topic.Heading)
+            .Select(item => new
+            {
+                item.Date,
+                Topic = new ScheduledTopicDto(
+                    item.Id,
+                    item.TopicInstanceId,
+                    item.CourseId,
+                    item.TopicInstance.Topic.Course.Name,
+                    item.TopicInstance.Topic.Heading,
+                    item.TopicInstance.Topic.Description)
+            })
+            .ToListAsync(cancellationToken);
+        var scheduledTopics = assignments
+            .GroupBy(item => item.Date)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ScheduledTopicDto>)group.Select(item => item.Topic).ToArray());
+
+        return CalendarBuilder.Build(config, courseId, courseWeekdays, markers, exams, scheduledTopics);
     }
 
     private async Task<AppConfig> GetConfigEntityAsync(CancellationToken cancellationToken) =>

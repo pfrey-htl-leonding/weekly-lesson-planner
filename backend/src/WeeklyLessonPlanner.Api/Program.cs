@@ -51,6 +51,7 @@ app.MapGet("/api/system/status", async (
     .WithTags("System");
 
 app.MapCalendarEndpoints();
+app.MapTopicEndpoints();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

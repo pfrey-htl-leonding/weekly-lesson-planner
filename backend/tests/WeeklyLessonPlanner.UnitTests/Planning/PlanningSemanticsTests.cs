@@ -1,7 +1,7 @@
 namespace WeeklyLessonPlanner.UnitTests.Planning;
 
 /// <summary>
-/// Executable specifications confirmed in Phase 0. Implement these with the scheduling engine in Phase 4.
+/// Remaining executable specifications confirmed in Phase 0. Implement these with the scheduling engine in Phase 4.
 /// </summary>
 public sealed class PlanningSemanticsTests
 {
@@ -26,15 +26,9 @@ public sealed class PlanningSemanticsTests
     public void DropCombinesCheckboxAwareDeleteAndInsertAtomically() { }
 
     [Fact(Skip = PhaseFour)]
-    public void CopyCreatesOneUnplannedInstanceOfSharedTopic() { }
-
-    [Fact(Skip = PhaseFour)]
     public void GlobalMarkerShiftsEveryAffectedCourseAtomically() { }
 
     [Fact(Skip = PhaseFour)]
     public void CourseExamShiftsOnlyItsCourse() { }
 
-    [Fact(Skip = PhaseFour)]
-    public void GlobalMarkerAndCourseExamCannotCoexist() { }
 }
-

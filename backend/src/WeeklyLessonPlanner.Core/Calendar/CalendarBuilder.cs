@@ -9,7 +9,8 @@ public static class CalendarBuilder
         Guid? courseId,
         IReadOnlySet<IsoWeekday> courseWeekdays,
         IReadOnlyDictionary<DateOnly, GlobalDayMarkerDto> markers,
-        IReadOnlyDictionary<DateOnly, CourseExamDto> exams)
+        IReadOnlyDictionary<DateOnly, CourseExamDto> exams,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics)
     {
         var firstMonday = config.PlanningStart.AddDays(-((int)config.PlanningStart.DayOfWeek + 6) % 7);
         var lastSunday = config.PlanningEnd.AddDays(7 - IsoDay(config.PlanningEnd));
@@ -26,7 +27,8 @@ public static class CalendarBuilder
                     courseId,
                     courseWeekdays,
                     markers,
-                    exams))
+                    exams,
+                    scheduledTopics))
                 .ToArray();
 
             weeks.Add(new CalendarWeekDto(
@@ -50,7 +52,8 @@ public static class CalendarBuilder
         Guid? courseId,
         IReadOnlySet<IsoWeekday> courseWeekdays,
         IReadOnlyDictionary<DateOnly, GlobalDayMarkerDto> markers,
-        IReadOnlyDictionary<DateOnly, CourseExamDto> exams)
+        IReadOnlyDictionary<DateOnly, CourseExamDto> exams,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics)
     {
         var inRange = date >= config.PlanningStart && date <= config.PlanningEnd;
         var state = EffectiveDayState.Normal;
@@ -75,7 +78,8 @@ public static class CalendarBuilder
             inRange,
             inRange && courseId.HasValue && courseWeekdays.Contains(weekday),
             state,
-            label);
+            label,
+            inRange && scheduledTopics.TryGetValue(date, out var topics) ? topics : []);
     }
 
     private static int IsoDay(DateOnly date) => date.DayOfWeek == DayOfWeek.Sunday

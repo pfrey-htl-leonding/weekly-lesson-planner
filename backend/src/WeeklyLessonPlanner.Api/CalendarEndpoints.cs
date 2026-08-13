@@ -41,6 +41,14 @@ public static class CalendarEndpoints
             var marker = await service.CreateGlobalMarkerAsync(command, token);
             return Results.Created($"/api/global-markers/{marker.Id}", marker);
         });
+        markers.MapPost("/range", async (
+            SaveGlobalDayMarkerRangeCommand command,
+            IPlanningService service,
+            CancellationToken token) =>
+        {
+            var created = await service.CreateGlobalMarkerRangeAsync(command, token);
+            return Results.Created("/api/global-markers", created);
+        });
         markers.MapPut("/{id:guid}", async (Guid id, SaveGlobalDayMarkerCommand command, IPlanningService service, CancellationToken token) =>
         {
             var marker = await service.UpdateGlobalMarkerAsync(id, command, token);

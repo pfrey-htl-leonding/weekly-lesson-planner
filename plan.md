@@ -159,6 +159,7 @@ Return validation conflicts such as occupied/fixed dates, insufficient remaining
 Create an Angular Material application shell containing:
 
 - A course selector and access to course/configuration management.
+- An **All topics** course-view option that renders placed topics from every course and identifies each topic's course.
 - A schedule board with sticky ISO week/date labels, week rows, weekday columns, and topic cards in eligible cells.
 - Global holiday/event colours, icons, labels, and editing controls on the shared time axis, plus course-specific exam controls in the selected course view.
 - An alphabetically sorted topic-management panel containing only unplanned topics, with create, edit, delete, search, and drag handles.
@@ -171,6 +172,7 @@ Create an Angular Material application shell containing:
 - A **Copy** action on each scheduled topic card that puts one copied, unplanned instance into the topic list.
 - CSV export for the selected course/date range.
 - Clear capacity/conflict errors and progress states. Overwrite mode intentionally does not show a confirmation dialog.
+- Management tabs ordered as Topic management, Course exam, Global holiday, Courses, Planning range, and Options; topic search/list precedes topic add/edit controls.
 - Responsive horizontal calendar scrolling rather than unreadably narrow cells.
 
 Use text/icons in addition to colour so the day states remain distinguishable for users with colour-vision deficiencies.
@@ -212,6 +214,8 @@ Use text/icons in addition to colour so the day states remain distinguishable fo
 
 ### Phase 3 — Topic management
 
+**Implementation status:** completed and verified on 2026-08-13.
+
 - Implement topic-definition CRUD, automatic creation of the first instance, and the alphabetically sorted unplanned-instance query.
 - Define deletion semantics explicitly: deleting an unplanned list entry removes that instance; deleting the shared topic definition is allowed only when none of its instances are scheduled and removes all its unplanned instances.
 - Implement copying a scheduled topic into one new unplanned instance of the same definition.
@@ -228,7 +232,7 @@ Use text/icons in addition to colour so the day states remain distinguishable fo
 - Implement unchecked insertion with immediate overwrite and unplanned-topic recalculation.
 - Implement checked/unchecked deletion behavior.
 - Implement atomic drag as checkbox-aware removal followed by checkbox-aware insertion.
-- Implement the Copy command for repeated material.
+- Integrate the Phase 3 Copy command with scheduling mutations and impact results.
 - Implement impact results, all-course shifting for global markers, single-course shifting for exams, and resolution of planning-range/course-weekday changes.
 - Test the service against a real containerized PostgreSQL instance, not an in-memory substitute for database-specific behavior.
 

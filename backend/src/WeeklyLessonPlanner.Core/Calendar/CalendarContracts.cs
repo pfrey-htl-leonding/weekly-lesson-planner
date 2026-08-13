@@ -64,6 +64,12 @@ public sealed record SaveGlobalDayMarkerCommand(
     GlobalDayMarkerType Type,
     string? Label);
 
+public sealed record SaveGlobalDayMarkerRangeCommand(
+    DateOnly From,
+    DateOnly Until,
+    GlobalDayMarkerType Type,
+    string? Label);
+
 public sealed record CourseExamDto(
     Guid Id,
     Guid CourseId,
@@ -72,13 +78,22 @@ public sealed record CourseExamDto(
 
 public sealed record SaveCourseExamCommand(Guid CourseId, DateOnly Date, string Name);
 
+public sealed record ScheduledTopicDto(
+    Guid AssignmentId,
+    Guid TopicInstanceId,
+    Guid CourseId,
+    string CourseName,
+    string Heading,
+    string Description);
+
 public sealed record CalendarDayDto(
     DateOnly Date,
     IsoWeekday Weekday,
     bool IsInPlanningRange,
     bool IsCourseDay,
     EffectiveDayState State,
-    string? Label);
+    string? Label,
+    IReadOnlyList<ScheduledTopicDto> ScheduledTopics);
 
 public sealed record CalendarWeekDto(
     int IsoYear,

@@ -20,6 +20,16 @@ Accept: application/json
 
 ###
 
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/topics?courseId={{courseId}}
+Accept: application/json
+
+###
+
+GET {{WeeklyLessonPlanner.Api_HostAddress}}/api/topic-instances/unplanned?courseId={{courseId}}
+Accept: application/json
+
+###
+
 GET {{WeeklyLessonPlanner.Api_HostAddress}}/health/live
 
 ###

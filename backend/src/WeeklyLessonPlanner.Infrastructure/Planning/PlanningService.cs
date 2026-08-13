@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Core.Planning;
+using WeeklyLessonPlanner.Core.Topics;
 using WeeklyLessonPlanner.Infrastructure.Calendar;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
 
@@ -38,6 +39,65 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         await SaveConflictSafeAsync("A holiday or event already exists on this date.", cancellationToken);
         await CommitConflictSafeAsync(transaction, cancellationToken);
         return CalendarService.ToDto(marker);
+    }
+
+    public async Task<IReadOnlyList<GlobalDayMarkerDto>> CreateGlobalMarkerRangeAsync(
+        SaveGlobalDayMarkerRangeCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateMarker(new SaveGlobalDayMarkerCommand(command.From, command.Type, command.Label));
+        if (command.Until < command.From)
+        {
+            throw new ArgumentException("Until must be on or after On/From.");
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable,
+            cancellationToken);
+        var config = await dbContext.AppConfigs.SingleAsync(
+            item => item.Id == AppConfig.SingletonId,
+            cancellationToken);
+        if (command.From < config.PlanningStart || command.Until > config.PlanningEnd)
+        {
+            throw new ArgumentException("The complete marker range must be inside the inclusive planning range.");
+        }
+
+        if (await dbContext.GlobalDayMarkers.AnyAsync(
+                item => item.Date >= command.From && item.Date <= command.Until,
+                cancellationToken))
+        {
+            throw new PlanningConflictException("The marker range overlaps an existing holiday or event.");
+        }
+
+        if (await dbContext.CourseExams.AnyAsync(
+                item => item.Date >= command.From && item.Date <= command.Until,
+                cancellationToken))
+        {
+            throw new PlanningConflictException("The marker range overlaps a course exam.");
+        }
+
+        if (await dbContext.TopicAssignments.AnyAsync(
+                item => item.Date >= command.From && item.Date <= command.Until,
+                cancellationToken))
+        {
+            throw new PlanningConflictException(
+                "The marker range contains scheduled topics. Automatic marker shifting is introduced in Phase 4.");
+        }
+
+        var markers = Enumerable
+            .Range(0, command.Until.DayNumber - command.From.DayNumber + 1)
+            .Select(offset => new GlobalDayMarker
+            {
+                Id = Guid.NewGuid(),
+                Date = command.From.AddDays(offset),
+                Type = command.Type,
+                Label = NormalizeOptional(command.Label)
+            })
+            .ToArray();
+        dbContext.GlobalDayMarkers.AddRange(markers);
+        await SaveConflictSafeAsync("The marker range overlaps an existing holiday or event.", cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return markers.Select(CalendarService.ToDto).ToArray();
     }
 
     public async Task<GlobalDayMarkerDto?> UpdateGlobalMarkerAsync(
@@ -129,6 +189,40 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         dbContext.CourseExams.Remove(exam);
         await dbContext.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<TopicInstanceDto?> CopyScheduledTopicAsync(
+        Guid sourceInstanceId,
+        CancellationToken cancellationToken = default)
+    {
+        var source = await dbContext.TopicInstances
+            .Include(item => item.Topic)
+            .Include(item => item.Assignment)
+            .SingleOrDefaultAsync(item => item.Id == sourceInstanceId, cancellationToken);
+        if (source is null)
+        {
+            return null;
+        }
+
+        if (source.Assignment is null)
+        {
+            throw new PlanningConflictException("Only a scheduled topic instance can be copied.");
+        }
+
+        var copy = new TopicInstance
+        {
+            Id = Guid.NewGuid(),
+            TopicId = source.TopicId,
+            CourseId = source.CourseId
+        };
+        dbContext.TopicInstances.Add(copy);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new TopicInstanceDto(
+            copy.Id,
+            copy.TopicId,
+            copy.CourseId,
+            source.Topic.Heading,
+            source.Topic.Description);
     }
 
     private async Task ValidateMarkerDateAsync(DateOnly date, Guid? markerId, CancellationToken cancellationToken)

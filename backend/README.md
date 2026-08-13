@@ -40,3 +40,12 @@ Set `TEST_POSTGRES_CONNECTION` to run the provider integration tests; otherwise 
 - `GET /api/calendar?courseId={id}`
 
 Marker and exam writes go through `IPlanningService`. Invalid requests use HTTP 400 Problem Details; exclusivity and destructive-change conflicts use HTTP 409 Problem Details.
+
+## Phase 3 API
+
+- `GET/POST/PUT/DELETE /api/topics`
+- `GET /api/topic-instances/unplanned?courseId={id}&search={text}`
+- `DELETE /api/topic-instances/{id}` for one unplanned instance
+- `POST /api/topic-instances/{scheduledId}/copy`
+
+Creating a definition creates its first unplanned instance. Planned/unplanned status is derived only from assignment presence. Shared definitions cannot be deleted while any instance is scheduled, and scheduled instances cannot be deleted through the unplanned-instance endpoint.

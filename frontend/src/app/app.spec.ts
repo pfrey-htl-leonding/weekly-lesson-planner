@@ -3,6 +3,7 @@ import { Observable, of, Subject } from 'rxjs';
 import { App } from './app';
 import { CalendarApi, CalendarView, EffectiveDayState, IsoWeekday } from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition } from './core/api/topic-api';
+import { PlanningApi, PlanningImpact } from './core/api/planning-api';
 
 const calendarApi = {
   getConfig: () => of({
@@ -33,6 +34,42 @@ const topicApi = {
   getUnplannedInstances: () => of([]),
   createTopic: vi.fn((command: SaveTopic) => of(toTopic('created', command))),
   updateTopic: vi.fn((id: string, command: SaveTopic) => of(toTopic(id, command))),
+  copyScheduledInstance: vi.fn(() => of({
+    id: 'copy', topicId: 'topic', courseId: 'course', heading: 'Trees', description: '',
+  })),
+};
+
+const emptyImpact: PlanningImpact = {
+  insertedAssignment: null,
+  removedAssignment: null,
+  movedAssignments: [],
+  affectedDates: [],
+  becameUnplanned: [],
+};
+
+const planningApi = {
+  place: vi.fn(() => of(emptyImpact)),
+  remove: vi.fn(() => of(emptyImpact)),
+  drag: vi.fn(() => of(emptyImpact)),
+};
+
+const eligibleDay = {
+  date: '2026-09-07',
+  weekday: IsoWeekday.Monday,
+  isInPlanningRange: true,
+  isCourseDay: true,
+  state: EffectiveDayState.Normal,
+  label: null,
+  scheduledTopics: [],
+};
+
+const scheduledTopic = {
+  assignmentId: 'assignment',
+  topicInstanceId: 'instance',
+  courseId: 'course',
+  courseName: 'Course',
+  heading: 'Trees',
+  description: '',
 };
 
 describe('App', () => {
@@ -43,6 +80,7 @@ describe('App', () => {
       providers: [
         { provide: CalendarApi, useValue: calendarApi },
         { provide: TopicApi, useValue: topicApi },
+        { provide: PlanningApi, useValue: planningApi },
       ],
     }).compileComponents();
   });
@@ -126,5 +164,123 @@ describe('App', () => {
       description: 'Updated description',
     });
     expect(topicApi.createTopic).not.toHaveBeenCalled();
+  });
+
+  it('does not call the planning API while a topic is merely dragged over a valid day', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    const dragData = component.scheduledDragData(scheduledTopic, '2026-09-01');
+
+    expect(component.canEnterDay(
+      { data: dragData } as never,
+      { data: eligibleDay } as never,
+    )).toBe(true);
+    expect(planningApi.place).not.toHaveBeenCalled();
+    expect(planningApi.remove).not.toHaveBeenCalled();
+    expect(planningApi.drag).not.toHaveBeenCalled();
+  });
+
+  it('places an unplanned topic exactly once on drop with the insertion option', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const instance = { id: 'instance', topicId: 'topic', courseId: 'course', heading: 'Trees', description: '' };
+    component.selectedCourseId = 'course';
+    component.insertShiftsSchedule = true;
+
+    component.onDayDrop({
+      item: { data: component.unplannedDragData(instance) },
+    } as never, eligibleDay);
+
+    expect(planningApi.place).toHaveBeenCalledTimes(1);
+    expect(planningApi.place).toHaveBeenCalledWith({
+      topicInstanceId: 'instance',
+      courseId: 'course',
+      date: '2026-09-07',
+      insertShiftsSchedule: true,
+    });
+  });
+
+  it('sends one atomic drag command on drop with both checkbox values', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.insertShiftsSchedule = true;
+    component.deleteShiftsSchedule = true;
+
+    component.onDayDrop({
+      item: { data: component.scheduledDragData(scheduledTopic, '2026-09-01') },
+    } as never, eligibleDay);
+
+    expect(planningApi.drag).toHaveBeenCalledTimes(1);
+    expect(planningApi.drag).toHaveBeenCalledWith({
+      assignmentId: 'assignment',
+      destinationDate: '2026-09-07',
+      deleteShiftsSchedule: true,
+      insertShiftsSchedule: true,
+    });
+  });
+
+  it('sends no command for an invalid or same-day drop', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    const data = component.scheduledDragData(scheduledTopic, eligibleDay.date);
+
+    component.onDayDrop({ item: { data } } as never, {
+      ...eligibleDay,
+      state: EffectiveDayState.Holiday,
+    });
+    component.onDayDrop({ item: { data } } as never, eligibleDay);
+
+    expect(planningApi.place).not.toHaveBeenCalled();
+    expect(planningApi.remove).not.toHaveBeenCalled();
+    expect(planningApi.drag).not.toHaveBeenCalled();
+  });
+
+  it('removes a scheduled topic dropped into the topic list using the deletion option', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.deleteShiftsSchedule = true;
+
+    component.onTopicListDrop({
+      item: { data: component.scheduledDragData(scheduledTopic, '2026-09-01') },
+    } as never);
+
+    expect(planningApi.remove).toHaveBeenCalledTimes(1);
+    expect(planningApi.remove).toHaveBeenCalledWith({
+      assignmentId: 'assignment',
+      deleteShiftsSchedule: true,
+    });
+  });
+
+  it('shifts forward while preserving the source gap regardless of checkbox values', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.deleteShiftsSchedule = true;
+    component.insertShiftsSchedule = false;
+    component.calendar = {
+      planningStart: '2026-09-07',
+      planningEnd: '2026-09-21',
+      courseId: 'course',
+      visibleWeekdays: [IsoWeekday.Monday],
+      weeks: [
+        { isoYear: 2026, isoWeek: 37, days: [{ ...eligibleDay, date: '2026-09-07' }] },
+        { isoYear: 2026, isoWeek: 38, days: [{ ...eligibleDay, date: '2026-09-14' }] },
+        { isoYear: 2026, isoWeek: 39, days: [{ ...eligibleDay, date: '2026-09-21' }] },
+      ],
+    };
+
+    component.moveScheduled(scheduledTopic, '2026-09-07', 1);
+
+    expect(planningApi.drag).toHaveBeenCalledTimes(1);
+    expect(planningApi.drag).toHaveBeenCalledWith({
+      assignmentId: 'assignment',
+      destinationDate: '2026-09-14',
+      deleteShiftsSchedule: false,
+      insertShiftsSchedule: true,
+    });
   });
 });

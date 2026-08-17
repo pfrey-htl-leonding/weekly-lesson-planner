@@ -2,14 +2,14 @@
   <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
   <span>Weekly Lesson Planner</span>
   <span class="toolbar-spacer"></span>
-  <span class="phase-label">Topics and calendar · Phase 3</span>
+  <span class="phase-label">Interactive planning · Phase 5</span>
 </mat-toolbar>
 
 <main class="app-content">
   @if (error) { <div class="notice error" role="alert">{{ error }}</div> }
   @if (message) { <div class="notice success" role="status">{{ message }}</div> }
 
-  <section class="workspace">
+  <section class="workspace" cdkDropListGroup>
     <aside class="controls">
       <mat-card appearance="outlined" class="management-card">
         <mat-tab-group dynamicHeight animationDuration="150ms">
@@ -25,17 +25,34 @@
                 <mat-icon matPrefix aria-hidden="true">search</mat-icon>
                 <input matInput [(ngModel)]="topicSearch" [disabled]="!selectedCourseId">
               </mat-form-field>
-              <div class="topic-instance-list">
+              <mat-form-field>
+                <mat-label>Target lesson date</mat-label>
+                <input matInput type="date" [(ngModel)]="placementDate" [disabled]="!selectedCourseId">
+                <mat-hint>Used by the keyboard-accessible Place buttons.</mat-hint>
+              </mat-form-field>
+              <div
+                class="topic-instance-list"
+                cdkDropList
+                [cdkDropListData]="unplannedTopics"
+                [cdkDropListSortingDisabled]="true"
+                (cdkDropListDropped)="onTopicListDrop($event)">
                 @for (instance of visibleUnplannedTopics(); track instance.id) {
-                  <article class="topic-instance">
+                  <article
+                    class="topic-instance"
+                    cdkDrag
+                    [cdkDragData]="unplannedDragData(instance)"
+                    [cdkDragDisabled]="busy || !selectedCourseId">
+                    <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to a lesson day">drag_indicator</mat-icon>
                     <div>
                       <strong>{{ instance.heading }}</strong>
                       <p [title]="instance.description">{{ instance.description || 'No description' }}</p>
                     </div>
                     <div class="topic-actions">
+                      <button mat-icon-button class="compact-icon" [attr.aria-label]="'Place ' + instance.heading + ' on selected target date'" (click)="placeTopic(instance)" [disabled]="!placementDate || busy"><mat-icon>event_available</mat-icon></button>
                       <button mat-icon-button class="compact-icon" [attr.aria-label]="'Edit topic ' + instance.heading" (click)="editTopic(instance)"><mat-icon>edit</mat-icon></button>
                       <button mat-icon-button class="compact-icon" [attr.aria-label]="'Delete one unplanned instance of ' + instance.heading" (click)="deleteTopicInstance(instance)"><mat-icon>delete</mat-icon></button>
                     </div>
+                    <div class="topic-drag-preview" *cdkDragPreview>{{ instance.heading }}</div>
                   </article>
                 } @empty { <p>No matching unplanned topic instances.</p> }
               </div>
@@ -135,7 +152,12 @@
 
           <mat-tab label="Options">
             <div class="tab-content form-grid">
+              <h3>Schedule changes</h3>
+              <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
+              <mat-checkbox [(ngModel)]="deleteShiftsSchedule">Delete shifts schedule</mat-checkbox>
+              <p class="field-note">These options apply to drops and the accessible placement, movement, and removal buttons.</p>
               @if (config) {
+                <h3>Calendar display</h3>
                 <div class="weekday-group">
                   <span>Visible calendar days</span>
                   @for (day of weekdays; track day) {
@@ -184,8 +206,20 @@
     <section class="calendar-panel" aria-label="School-year calendar">
       <div class="calendar-heading">
         <div><h1>School-year calendar</h1><p>ISO 8601 weeks · global markers apply to every course</p></div>
-        <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+        <div class="calendar-controls">
+          <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+          <div class="planning-options" aria-label="Schedule shift options">
+            <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
+            <mat-checkbox [(ngModel)]="deleteShiftsSchedule">Delete shifts schedule</mat-checkbox>
+          </div>
+        </div>
       </div>
+
+      @if (!selectedCourseId) {
+        <p class="planning-hint"><mat-icon aria-hidden="true">info</mat-icon>Select one course to place, move, copy, or remove topics. All topics remains a read-only aggregate view.</p>
+      } @else {
+        <p class="planning-hint"><mat-icon aria-hidden="true">drag_indicator</mat-icon>Drag an unplanned topic onto an eligible lesson day, drag a scheduled topic between days, or use its buttons. Changes occur only on drop.</p>
+      }
 
       @if (calendar) {
         <div class="calendar-scroll">
@@ -195,15 +229,44 @@
               @for (week of calendar.weeks; track week.isoYear + '-' + week.isoWeek) {
                 <tr><th class="week-column">{{ week.isoYear }}-W{{ week.isoWeek.toString().padStart(2, '0') }}</th>
                   @for (day of week.days; track day.date) {
-                    <td [class.outside-range]="!day.isInPlanningRange" [class.course-day]="day.isCourseDay" [class.fixed-day]="day.state !== states.Normal" [ngStyle]="dayStyle(day)">
+                    <td
+                      cdkDropList
+                      [cdkDropListData]="day"
+                      [cdkDropListDisabled]="!canDropOnDay(day)"
+                      [cdkDropListEnterPredicate]="canEnterDay"
+                      [cdkDropListSortingDisabled]="true"
+                      (cdkDropListDropped)="onDayDrop($event, day)"
+                      [class.outside-range]="!day.isInPlanningRange"
+                      [class.course-day]="day.isCourseDay"
+                      [class.fixed-day]="day.state !== states.Normal"
+                      [class.eligible-drop-target]="canDropOnDay(day)"
+                      [ngStyle]="dayStyle(day)">
                       <span class="date">{{ calendarDateLabel(day.date) }}</span>
                       @if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
                       @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
                       @for (topic of day.scheduledTopics; track topic.assignmentId) {
-                        <article class="scheduled-topic">
-                          @if (!selectedCourseId) { <small>{{ topic.courseName }}</small> }
-                          <strong>{{ topic.heading }}</strong>
+                        <article
+                          class="scheduled-topic"
+                          cdkDrag
+                          [cdkDragData]="scheduledDragData(topic, day.date)"
+                          [cdkDragDisabled]="busy || !selectedCourseId">
+                          <div class="scheduled-topic-heading">
+                            @if (selectedCourseId) { <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to another lesson day">drag_indicator</mat-icon> }
+                            <div>
+                              @if (!selectedCourseId) { <small>{{ topic.courseName }}</small> }
+                              <strong>{{ topic.heading }}</strong>
+                            </div>
+                          </div>
                           @if (topic.description) { <span [title]="topic.description">{{ topic.description }}</span> }
+                          @if (selectedCourseId) {
+                            <div class="scheduled-actions">
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move ' + topic.heading + ' to the previous eligible day'" (click)="moveScheduled(topic, day.date, -1)" [disabled]="busy || !canMoveScheduled(day.date, -1)"><mat-icon>arrow_back</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Shift ' + topic.heading + ' forward one eligible day and leave its current day empty'" title="Shift forward; leave current day empty" (click)="moveScheduled(topic, day.date, 1)" [disabled]="busy || !canMoveScheduled(day.date, 1)"><mat-icon>arrow_forward</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Copy ' + topic.heading + ' to the unplanned list'" (click)="copyScheduledTopic(topic)" [disabled]="busy"><mat-icon>content_copy</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Remove ' + topic.heading + ' from the schedule'" (click)="removeScheduledTopic(topic)" [disabled]="busy"><mat-icon>event_busy</mat-icon></button>
+                            </div>
+                          }
+                          <div class="topic-drag-preview" *cdkDragPreview>{{ topic.heading }}</div>
                         </article>
                       }
                     </td>

@@ -169,6 +169,7 @@ Create an Angular Material application shell containing:
 - Drag-and-drop from the unplanned topic list to the calendar and between scheduled calendar cells.
 - During dragging, show only normal drag/drop affordances such as the dragged card and valid target highlight; do not show a live preview of shifted topics.
 - Keyboard-accessible place, move earlier/later, copy, and remove controls using the same API commands as drag-and-drop.
+- The forward-arrow action is a dedicated one-slot forward shift: it leaves the source lesson day empty and cascades the destination sequence forward, independent of the two general drag/drop checkboxes.
 - A **Copy** action on each scheduled topic card that puts one copied, unplanned instance into the topic list.
 - CSV export for the selected course/date range.
 - Clear capacity/conflict errors and progress states. Overwrite mode intentionally does not show a confirmation dialog.
@@ -244,12 +245,16 @@ Verification: the scheduling API exposes transactional `place`, `remove`, and `d
 
 ### Phase 5 — Interactive planner
 
+**Implementation status:** completed and verified on 2026-08-17.
+
 - Bind the schedule board and unplanned topic list to API queries.
 - Add both shift checkboxes and pass their values in command requests.
 - Add list-to-calendar placement, checkbox-aware scheduled-topic dragging, Copy controls, and visual drop restrictions.
 - Add accessible button/keyboard alternatives that call the same backend commands.
 - Refresh affected schedule and topic-list state from command impact results.
 - Check usability with a realistic full school year and the patterns in the reference workbook.
+
+Verification: the selected-course view connects the alphabetic unplanned list and eligible calendar cells with drop-only CDK drag interactions. It exposes both shift checkboxes, place/move/copy/remove button alternatives, read-only all-course aggregation, fixed-day drop restrictions, compact topic cards, and impact-aware success messages followed by authoritative calendar/list refreshes. Angular tests verify that merely entering a drop target sends no request, valid drops send exactly one checkbox-aware command, and invalid, cancelled, or same-day interactions do not mutate the schedule. The production Angular bundle and complete backend regression suite pass, and the Compose frontend is deployed on the full school-year calendar.
 
 **Exit criterion:** planning, overwrite, insertion shift, deletion with/without shift, copying, and drag workflows operate without manual date repair.
 

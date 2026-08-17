@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { HttpErrorResponse } from '@angular/common/http';
+import { CdkDrag, CdkDragDrop, CdkDropList, DragDropModule } from '@angular/cdk/drag-drop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -13,7 +14,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { forkJoin, of } from 'rxjs';
+import { forkJoin, Observable, of } from 'rxjs';
 import {
   AppConfig,
   CalendarApi,
@@ -26,17 +27,24 @@ import {
   GlobalDayMarkerType,
   IsoWeekday,
   SaveCourse,
+  ScheduledTopic,
 } from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
+import { PlanningApi, PlanningImpact } from './core/api/planning-api';
 import {
   parseNameDescriptionCsv,
   writeNameDescriptionCsv,
 } from './core/data/name-description-csv';
 
+type PlannerDragData =
+  | { kind: 'unplanned'; courseId: string; instance: TopicInstance }
+  | { kind: 'scheduled'; courseId: string; topic: ScheduledTopic; sourceDate: string };
+
 @Component({
   selector: 'app-root',
   imports: [
     CommonModule,
+    DragDropModule,
     FormsModule,
     MatButtonModule,
     MatCardModule,
@@ -56,6 +64,7 @@ import {
 export class App implements OnInit {
   private readonly api = inject(CalendarApi);
   private readonly topicApi = inject(TopicApi);
+  private readonly planningApi = inject(PlanningApi);
   private readonly snackBar = inject(MatSnackBar);
   private readonly changeDetector = inject(ChangeDetectorRef);
 
@@ -80,11 +89,19 @@ export class App implements OnInit {
   topicDraft: Omit<SaveTopic, 'courseId'> = { heading: '', description: '' };
   editingTopicId: string | null = null;
   topicSearch = '';
+  placementDate = '';
+  insertShiftsSchedule = false;
+  deleteShiftsSchedule = false;
   dataTransferText = '';
   dataTransferKind: 'topics' | 'courses' = 'topics';
   busy = false;
   message = '';
   error = '';
+
+  readonly canEnterDay = (
+    drag: CdkDrag<PlannerDragData>,
+    drop: CdkDropList<CalendarDay>,
+  ): boolean => this.canDropOnDay(drop.data, drag.data.courseId);
 
   ngOnInit(): void {
     this.reloadAll();
@@ -354,6 +371,133 @@ export class App implements OnInit {
     return this.unplannedTopics.filter(topic =>
       topic.heading.toLocaleLowerCase().includes(search) ||
       topic.description.toLocaleLowerCase().includes(search));
+  }
+
+  unplannedDragData(instance: TopicInstance): PlannerDragData {
+    return { kind: 'unplanned', courseId: instance.courseId, instance };
+  }
+
+  scheduledDragData(topic: ScheduledTopic, sourceDate: string): PlannerDragData {
+    return { kind: 'scheduled', courseId: topic.courseId, topic, sourceDate };
+  }
+
+  canDropOnDay(day: CalendarDay, courseId = this.selectedCourseId): boolean {
+    return !this.busy && !!this.selectedCourseId && courseId === this.selectedCourseId &&
+      day.isInPlanningRange && day.isCourseDay && day.state === EffectiveDayState.Normal;
+  }
+
+  onDayDrop(event: CdkDragDrop<CalendarDay, unknown, PlannerDragData>, day: CalendarDay): void {
+    const dragged = event.item.data;
+    if (!this.canDropOnDay(day, dragged.courseId)) return;
+
+    if (dragged.kind === 'unplanned') {
+      this.placeTopic(dragged.instance, day.date);
+      return;
+    }
+
+    if (dragged.sourceDate === day.date) return;
+    this.dragScheduledTopic(dragged.topic, day.date);
+  }
+
+  onTopicListDrop(event: CdkDragDrop<TopicInstance[], unknown, PlannerDragData>): void {
+    const dragged = event.item.data;
+    if (dragged.kind !== 'scheduled' || dragged.courseId !== this.selectedCourseId || this.busy) return;
+    this.removeScheduledTopic(dragged.topic);
+  }
+
+  placeTopic(instance: TopicInstance, date = this.placementDate): void {
+    if (!this.selectedCourseId || !date) {
+      this.fail('Choose a target lesson date first.');
+      return;
+    }
+
+    this.runPlanningCommand(this.planningApi.place({
+      topicInstanceId: instance.id,
+      courseId: this.selectedCourseId,
+      date,
+      insertShiftsSchedule: this.insertShiftsSchedule,
+    }), `Placed “${instance.heading}”`);
+  }
+
+  dragScheduledTopic(
+    topic: ScheduledTopic,
+    destinationDate: string,
+    options = {
+      deleteShiftsSchedule: this.deleteShiftsSchedule,
+      insertShiftsSchedule: this.insertShiftsSchedule,
+    },
+  ): void {
+    this.runPlanningCommand(this.planningApi.drag({
+      assignmentId: topic.assignmentId,
+      destinationDate,
+      deleteShiftsSchedule: options.deleteShiftsSchedule,
+      insertShiftsSchedule: options.insertShiftsSchedule,
+    }), `Moved “${topic.heading}”`);
+  }
+
+  removeScheduledTopic(topic: ScheduledTopic): void {
+    this.runPlanningCommand(this.planningApi.remove({
+      assignmentId: topic.assignmentId,
+      deleteShiftsSchedule: this.deleteShiftsSchedule,
+    }), `Removed “${topic.heading}”`);
+  }
+
+  copyScheduledTopic(topic: ScheduledTopic): void {
+    this.busy = true;
+    this.topicApi.copyScheduledInstance(topic.topicInstanceId).subscribe({
+      next: () => {
+        this.succeed(`Copied “${topic.heading}” to the unplanned topic list.`);
+        this.reloadCalendar();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  canMoveScheduled(sourceDate: string, direction: -1 | 1): boolean {
+    return this.relativeLessonDate(sourceDate, direction) !== null;
+  }
+
+  moveScheduled(topic: ScheduledTopic, sourceDate: string, direction: -1 | 1): void {
+    const destination = this.relativeLessonDate(sourceDate, direction);
+    if (!destination) {
+      this.fail(`There is no ${direction < 0 ? 'earlier' : 'later'} eligible lesson day in the calendar.`);
+      return;
+    }
+
+    if (direction > 0) {
+      this.dragScheduledTopic(topic, destination, {
+        deleteShiftsSchedule: false,
+        insertShiftsSchedule: true,
+      });
+      return;
+    }
+
+    this.dragScheduledTopic(topic, destination);
+  }
+
+  private relativeLessonDate(sourceDate: string, direction: -1 | 1): string | null {
+    if (!this.calendar || !this.selectedCourseId) return null;
+    const eligibleDates = this.calendar.weeks
+      .flatMap(week => week.days)
+      .filter(day => day.isInPlanningRange && day.isCourseDay && day.state === EffectiveDayState.Normal)
+      .map(day => day.date);
+    const index = eligibleDates.indexOf(sourceDate);
+    return index >= 0 ? eligibleDates[index + direction] ?? null : null;
+  }
+
+  private runPlanningCommand(request: Observable<PlanningImpact>, action: string): void {
+    this.busy = true;
+    request.subscribe({
+      next: impact => {
+        const details = [
+          impact.movedAssignments.length > 0 ? `${impact.movedAssignments.length} shifted` : '',
+          impact.becameUnplanned.length > 0 ? `${impact.becameUnplanned.length} returned to the list` : '',
+        ].filter(Boolean).join(', ');
+        this.succeed(`${action}${details ? ` (${details})` : ''}.`);
+        this.reloadCalendar();
+      },
+      error: error => this.handleError(error),
+    });
   }
 
   exportData(): void {

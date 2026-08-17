@@ -45,8 +45,9 @@ mat-card-content { padding-top: 1rem; }
 .calendar-heading { align-items: start; display: flex; justify-content: space-between; gap: 1rem; }
 .calendar-heading h1 { margin: .25rem 0; }
 .calendar-heading p { color: var(--mat-sys-on-surface-variant); margin: 0 0 1rem; }
-.calendar-controls { align-items: end; display: flex; flex-direction: column; min-width: 20rem; }
-.calendar-controls mat-form-field { width: 100%; }
+.calendar-controls { align-items: end; display: flex; flex-direction: column; min-width: 30rem; }
+.calendar-view-selectors { display: grid; gap: .65rem; grid-template-columns: minmax(10rem, 1fr) minmax(12rem, 1fr); width: 100%; }
+.calendar-view-selectors mat-form-field { min-width: 0; width: 100%; }
 .planning-options { display: flex; flex-wrap: wrap; gap: 0 .65rem; justify-content: end; }
 .planning-hint { align-items: center; color: var(--mat-sys-on-surface-variant); display: flex; font-size: .78rem; gap: .35rem; margin: -.4rem 0 .6rem; }
 .planning-hint mat-icon { font-size: 1rem; height: 1rem; width: 1rem; }
@@ -76,4 +77,4 @@ td.fixed-day { background-color: var(--mat-sys-surface-container-high); }
 .cdk-drag-placeholder { opacity: .3; }
 .cdk-drag-animating { transition: transform 150ms ease; }
 @media (max-width: 75rem) { .workspace { grid-template-columns: 1fr; } .calendar-scroll { max-height: 70vh; } }
-@media (max-width: 45rem) { .calendar-heading { flex-direction: column; } .calendar-controls { align-items: stretch; min-width: 100%; } .planning-options { justify-content: start; } }
+@media (max-width: 45rem) { .calendar-heading { flex-direction: column; } .calendar-controls { align-items: stretch; min-width: 100%; } .calendar-view-selectors { grid-template-columns: 1fr; } .planning-options { justify-content: start; } }

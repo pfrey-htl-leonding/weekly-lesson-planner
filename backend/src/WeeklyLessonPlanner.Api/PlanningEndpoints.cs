@@ -31,6 +31,11 @@ public static class PlanningEndpoints
             return impact is null ? Results.NotFound() : Results.Ok(impact);
         });
 
+        planning.MapPost("/course-rollover", async (
+            CourseRolloverCommand command,
+            IPlanningService service,
+            CancellationToken token) => Results.Ok(await service.RollOverCourseAsync(command, token)));
+
         return endpoints;
     }
 }

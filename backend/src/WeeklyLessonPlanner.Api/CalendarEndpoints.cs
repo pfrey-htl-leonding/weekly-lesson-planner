@@ -14,8 +14,24 @@ public static class CalendarEndpoints
         api.MapPut("/config", (UpdateAppConfigCommand command, ICalendarService service, CancellationToken token) =>
             service.UpdateConfigAsync(command, token));
 
+        var schoolYears = api.MapGroup("/school-years");
+        schoolYears.MapGet("/", (ICalendarService service, CancellationToken token) => service.GetSchoolYearsAsync(token));
+        schoolYears.MapPost("/", async (SaveSchoolYearCommand command, ICalendarService service, CancellationToken token) =>
+        {
+            var schoolYear = await service.CreateSchoolYearAsync(command, token);
+            return Results.Created($"/api/school-years/{schoolYear.Id}", schoolYear);
+        });
+        schoolYears.MapPut("/{id:guid}", async (Guid id, SaveSchoolYearCommand command, ICalendarService service, CancellationToken token) =>
+        {
+            var schoolYear = await service.UpdateSchoolYearAsync(id, command, token);
+            return schoolYear is null ? Results.NotFound() : Results.Ok(schoolYear);
+        });
+        schoolYears.MapDelete("/{id:guid}", async (Guid id, ICalendarService service, CancellationToken token) =>
+            await service.DeleteSchoolYearAsync(id, token) ? Results.NoContent() : Results.NotFound());
+
         var courses = api.MapGroup("/courses");
-        courses.MapGet("/", (ICalendarService service, CancellationToken token) => service.GetCoursesAsync(token));
+        courses.MapGet("/", (Guid? schoolYearId, ICalendarService service, CancellationToken token) =>
+            service.GetCoursesAsync(schoolYearId, token));
         courses.MapGet("/{id:guid}", async (Guid id, ICalendarService service, CancellationToken token) =>
         {
             var course = await service.GetCourseAsync(id, token);
@@ -35,7 +51,8 @@ public static class CalendarEndpoints
             await service.DeleteCourseAsync(id, token) ? Results.NoContent() : Results.NotFound());
 
         var markers = api.MapGroup("/global-markers");
-        markers.MapGet("/", (ICalendarService service, CancellationToken token) => service.GetGlobalMarkersAsync(token));
+        markers.MapGet("/", (Guid schoolYearId, ICalendarService service, CancellationToken token) =>
+            service.GetGlobalMarkersAsync(schoolYearId, token));
         markers.MapPost("/", async (SaveGlobalDayMarkerCommand command, IPlanningService service, CancellationToken token) =>
         {
             var marker = await service.CreateGlobalMarkerAsync(command, token);
@@ -73,8 +90,8 @@ public static class CalendarEndpoints
         exams.MapDelete("/{id:guid}", async (Guid id, IPlanningService service, CancellationToken token) =>
             await service.DeleteCourseExamAsync(id, token) ? Results.NoContent() : Results.NotFound());
 
-        api.MapGet("/calendar", (Guid? courseId, ICalendarService service, CancellationToken token) =>
-            service.GetCalendarAsync(courseId, token));
+        api.MapGet("/calendar", (Guid? courseId, Guid? schoolYearId, ICalendarService service, CancellationToken token) =>
+            service.GetCalendarAsync(courseId, schoolYearId, token));
 
         return endpoints;
     }

@@ -7,15 +7,18 @@ import { PlanningApi, PlanningImpact } from './core/api/planning-api';
 
 const calendarApi = {
   getConfig: () => of({
-    planningStart: '2026-09-01', planningEnd: '2026-09-04',
     visibleWeekdays: [IsoWeekday.Monday, IsoWeekday.Tuesday, IsoWeekday.Wednesday, IsoWeekday.Thursday, IsoWeekday.Friday],
     holidayColor: '#008000', eventColor: '#0000ff', examColor: '#ffff00', weekNumbering: 'ISO 8601',
   }),
+  getSchoolYears: () => of([{
+    id: 'school-year', name: '2026/27', planningStart: '2026-09-01', planningEnd: '2027-06-30',
+  }]),
   getCourses: () => of([]),
   getMarkers: () => of([]),
   getExams: () => of([]),
   getCalendar: (): Observable<CalendarView> => of({
     planningStart: '2026-09-01', planningEnd: '2026-09-04', courseId: null,
+    schoolYearId: 'school-year', schoolYearName: '2026/27',
     visibleWeekdays: [IsoWeekday.Monday, IsoWeekday.Tuesday, IsoWeekday.Wednesday, IsoWeekday.Thursday, IsoWeekday.Friday],
     weeks: [],
   }),
@@ -51,6 +54,21 @@ const planningApi = {
   place: vi.fn(() => of(emptyImpact)),
   remove: vi.fn(() => of(emptyImpact)),
   drag: vi.fn(() => of(emptyImpact)),
+  rollOverCourse: vi.fn(() => of({
+    course: {
+      id: 'rolled-over-course',
+      schoolYearId: 'target-year',
+      name: 'Course',
+      description: '',
+      weekdays: [IsoWeekday.Friday],
+    },
+    topicDefinitionCount: 2,
+    topicInstanceCount: 3,
+    assignmentCount: 2,
+    firstAssignedDate: '2027-09-03',
+    lastAssignedDate: '2027-09-17',
+    skippedFixedDates: ['2027-09-10'],
+  })),
 };
 
 const eligibleDay = {
@@ -123,6 +141,8 @@ describe('App', () => {
     calendarResponse.next({
       planningStart: '2026-08-03',
       planningEnd: '2026-08-03',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
       courseId: null,
       visibleWeekdays: [IsoWeekday.Monday],
       weeks: [{
@@ -264,6 +284,8 @@ describe('App', () => {
     component.calendar = {
       planningStart: '2026-09-07',
       planningEnd: '2026-09-21',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
       courseId: 'course',
       visibleWeekdays: [IsoWeekday.Monday],
       weeks: [
@@ -281,6 +303,52 @@ describe('App', () => {
       destinationDate: '2026-09-14',
       deleteShiftsSchedule: false,
       insertShiftsSchedule: true,
+    });
+  });
+
+  it('returns the course view to All topics when switching school year', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.selectedSchoolYearId = 'next-school-year';
+
+    component.changeSchoolYearView();
+
+    expect(component.selectedCourseId).toBe('');
+  });
+
+  it('defaults the rollover start date when its target school year changes', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.schoolYears = [
+      { id: 'source-year', name: '2026/27', planningStart: '2026-09-01', planningEnd: '2027-06-30' },
+      { id: 'target-year', name: '2027/28', planningStart: '2027-09-01', planningEnd: '2028-06-30' },
+    ];
+    component.rolloverDraft.targetSchoolYearId = 'target-year';
+    component.rolloverDraft.targetStartDate = '2027-10-01';
+
+    component.changeRolloverTargetYear();
+
+    expect(component.rolloverDraft.targetStartDate).toBe('2027-09-01');
+  });
+
+  it('submits course rollover with an independently selected target lesson day', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.rolloverDraft = {
+      sourceCourseId: 'source-course',
+      targetSchoolYearId: 'target-year',
+      targetStartDate: '2027-09-01',
+      targetWeekday: IsoWeekday.Friday,
+    };
+
+    component.rollOverCourse();
+
+    expect(planningApi.rollOverCourse).toHaveBeenCalledWith({
+      sourceCourseId: 'source-course',
+      targetSchoolYearId: 'target-year',
+      targetStartDate: '2027-09-01',
+      targetWeekday: IsoWeekday.Friday,
     });
   });
 });

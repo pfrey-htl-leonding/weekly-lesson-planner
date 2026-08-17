@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from './api-client';
+import { Course, IsoWeekday } from './calendar-api';
 import { TopicInstance } from './topic-api';
 
 export interface PlaceTopicCommand {
@@ -20,6 +21,23 @@ export interface DragTopicCommand {
   destinationDate: string;
   deleteShiftsSchedule: boolean;
   insertShiftsSchedule: boolean;
+}
+
+export interface CourseRolloverCommand {
+  sourceCourseId: string;
+  targetSchoolYearId: string;
+  targetStartDate: string;
+  targetWeekday: IsoWeekday;
+}
+
+export interface CourseRolloverResult {
+  course: Course;
+  topicDefinitionCount: number;
+  topicInstanceCount: number;
+  assignmentCount: number;
+  firstAssignedDate: string | null;
+  lastAssignedDate: string | null;
+  skippedFixedDates: string[];
 }
 
 export interface AssignmentImpact {
@@ -60,5 +78,9 @@ export class PlanningApi {
 
   drag(command: DragTopicCommand): Observable<PlanningImpact> {
     return this.api.post('/api/planning/drag', command);
+  }
+
+  rollOverCourse(command: CourseRolloverCommand): Observable<CourseRolloverResult> {
+    return this.api.post('/api/planning/course-rollover', command);
   }
 }

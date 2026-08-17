@@ -22,6 +22,7 @@ public sealed class Phase2CalendarTests
         var firstWeekday = ToIsoWeekday(date);
         var secondWeekday = ToIsoWeekday(otherDate);
         var course = await calendar.CreateCourseAsync(new(
+            SchoolYear.DefaultId,
             $"Phase 2 {suffix}",
             "Integration test",
             [firstWeekday, secondWeekday]));
@@ -29,12 +30,14 @@ public sealed class Phase2CalendarTests
         try
         {
             var updatedCourse = await calendar.UpdateCourseAsync(course.Id, new(
+                SchoolYear.DefaultId,
                 course.Name,
                 "Updated integration test",
                 [secondWeekday]));
             Assert.Equal([secondWeekday], updatedCourse!.Weekdays);
 
             var marker = await planning.CreateGlobalMarkerAsync(new(
+                SchoolYear.DefaultId,
                 date,
                 GlobalDayMarkerType.Holiday,
                 "Holiday"));
@@ -45,8 +48,8 @@ public sealed class Phase2CalendarTests
                 "Conflicting exam")));
 
             var exam = await planning.CreateCourseExamAsync(new(course.Id, otherDate, "Course exam"));
-            var view = await calendar.GetCalendarAsync(course.Id);
-            var withoutCourse = await calendar.GetCalendarAsync(null);
+            var view = await calendar.GetCalendarAsync(course.Id, null);
+            var withoutCourse = await calendar.GetCalendarAsync(null, SchoolYear.DefaultId);
 
             Assert.Equal(EffectiveDayState.Holiday, FindDay(view, date).State);
             Assert.Equal(EffectiveDayState.Exam, FindDay(view, otherDate).State);
@@ -64,6 +67,7 @@ public sealed class Phase2CalendarTests
                 "Range conflict"));
             await Assert.ThrowsAsync<PlanningConflictException>(() =>
                 planning.CreateGlobalMarkerRangeAsync(new(
+                    SchoolYear.DefaultId,
                     rangeStart,
                     rangeEnd,
                     GlobalDayMarkerType.Holiday,
@@ -73,6 +77,7 @@ public sealed class Phase2CalendarTests
 
             await planning.DeleteCourseExamAsync(blockingExam.Id);
             var range = await planning.CreateGlobalMarkerRangeAsync(new(
+                SchoolYear.DefaultId,
                 rangeStart,
                 rangeEnd,
                 GlobalDayMarkerType.Holiday,
@@ -100,12 +105,12 @@ public sealed class Phase2CalendarTests
         int length,
         DateOnly? notBefore = null)
     {
-        var config = await dbContext.AppConfigs.AsNoTracking().SingleAsync();
+        var schoolYear = await dbContext.SchoolYears.AsNoTracking().SingleAsync(item => item.Id == SchoolYear.DefaultId);
         var markers = (await dbContext.GlobalDayMarkers.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
         var exams = (await dbContext.CourseExams.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
         var assignments = (await dbContext.TopicAssignments.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
-        var first = notBefore is { } requested && requested > config.PlanningStart ? requested : config.PlanningStart;
-        for (var date = first; date.AddDays(length - 1) <= config.PlanningEnd; date = date.AddDays(1))
+        var first = notBefore is { } requested && requested > schoolYear.PlanningStart ? requested : schoolYear.PlanningStart;
+        for (var date = first; date.AddDays(length - 1) <= schoolYear.PlanningEnd; date = date.AddDays(1))
         {
             if (Enumerable.Range(0, length).Select(date.AddDays)
                 .All(candidate => !markers.Contains(candidate) && !exams.Contains(candidate) && !assignments.Contains(candidate)))

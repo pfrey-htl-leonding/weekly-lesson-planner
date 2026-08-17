@@ -1,3 +1,4 @@
+using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Core.Topics;
 
 namespace WeeklyLessonPlanner.Core.Planning;
@@ -17,6 +18,21 @@ public sealed record DragTopicCommand(
     DateOnly DestinationDate,
     bool DeleteShiftsSchedule,
     bool InsertShiftsSchedule);
+
+public sealed record CourseRolloverCommand(
+    Guid SourceCourseId,
+    Guid TargetSchoolYearId,
+    DateOnly TargetStartDate,
+    IsoWeekday TargetWeekday);
+
+public sealed record CourseRolloverResultDto(
+    CourseDto Course,
+    int TopicDefinitionCount,
+    int TopicInstanceCount,
+    int AssignmentCount,
+    DateOnly? FirstAssignedDate,
+    DateOnly? LastAssignedDate,
+    IReadOnlyList<DateOnly> SkippedFixedDates);
 
 public sealed record AssignmentImpactDto(
     Guid AssignmentId,

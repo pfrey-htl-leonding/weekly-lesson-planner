@@ -20,6 +20,7 @@ The following requirements and interpretations are confirmed:
 12. **Export:** provide CSV schedule export.
 13. **Deployment:** run the Angular frontend, .NET API, and PostgreSQL database as a Docker Compose stack.
 14. **Users:** no authentication, authorization, or user management is required.
+15. **Course rollover:** clone a source course from the currently selected school year into a target school year without changing the source. Copy its course details and topics, then place copies of its scheduled topic instances in their original chronological order on the target course's eligible lesson days. Global holidays/events come from the target school year; exams are not copied.
 
 ## 2. Confirmed interaction semantics
 
@@ -68,16 +69,17 @@ Build frontend and API images with multi-stage Dockerfiles. Run Entity Framework
 
 The initial EF Core model should contain:
 
-- **AppConfig**: inclusive planning-range start/end dates, visible weekdays, display colours, and ISO week convention.
-- **Course**: name and description.
+- **AppConfig**: visible weekdays, display colours, and ISO week convention.
+- **SchoolYear**: name and inclusive planning-range start/end dates. School years coexist and own their courses and global markers.
+- **Course**: school year, name, and description. Course names are unique within a school year.
 - **CourseWeekday**: course and weekday defining recurring lesson slots. Include a slot ordinal only if multiple lessons for one course can occur on the same date.
-- **GlobalDayMarker**: calendar date, type (`Holiday` or `Event`), and optional label. A unique constraint on date makes holiday and event mutually exclusive. The marker blocks that date for every course.
+- **GlobalDayMarker**: school year, calendar date, type (`Holiday` or `Event`), and optional label. A unique constraint on school year/date makes holiday and event mutually exclusive. The marker blocks that date for every course in its school year.
 - **CourseExam**: course, calendar date, and exam name. A unique constraint on course/date allows at most one exam for that course on the date. Planning-service validation prevents exams on dates having a global marker and prevents a new global marker on a date having any exams.
 - **Topic**: the reusable definition containing course, heading, and description.
 - **TopicInstance**: one independently schedulable instance of a topic. Creating a topic creates its first unplanned instance; **Copy** creates one more instance pointing to the same topic definition.
 - **TopicAssignment**: course, topic instance, and calendar date. Unique constraints on course/date and topic instance guarantee that at most one topic instance occupies a course day and that one instance occupies at most one day. Composite relationships through the topic definition guarantee at database level that the instance belongs to the assigned course.
 
-An exam is a `CourseExam`, not a topic. It blocks only its course/date and cannot coexist with a `TopicAssignment` for that course/date. A holiday or event blocks all course assignments on its date. Marker and assignment commands must use transaction isolation/locking sufficient to preserve these cross-table exclusivity rules under concurrent requests.
+An exam is a `CourseExam`, not a topic. It blocks only its course/date and cannot coexist with a `TopicAssignment` for that course/date. A holiday or event blocks all course assignments on its date within its school year. Marker and assignment commands must use transaction isolation/locking sufficient to preserve these cross-table exclusivity rules under concurrent requests.
 
 A topic instance is **unplanned** when it has no `TopicAssignment` row and **planned** when it has one. The unplanned topic list is therefore a query result, not mutable status stored separately. The **Copy** command creates a new instance linked to the same topic definition and with no assignment. Instances move independently, while editing the shared topic heading or description updates every instance.
 
@@ -87,7 +89,7 @@ Use generated stable IDs, foreign keys, indexes, maximum string lengths, Postgre
 
 `PlanningService` is the only component allowed to mutate `TopicAssignment` rows. It uses `PlannerDbContext` through constructor injection and implements these rules:
 
-1. Generate a course's eligible lesson-slot sequence from its configured weekdays and inclusive planning range.
+1. Generate a course's eligible lesson-slot sequence from its configured weekdays and its school year's inclusive planning range.
 2. Skip dates having a global holiday/event and dates having an exam for the course being planned.
 3. Reject assignments on the wrong weekday, on a fixed day, outside the planning range, for another course, or in an impossible target state.
 4. Apply each command and all resulting shifts in one database transaction.
@@ -122,12 +124,24 @@ Use generated stable IDs, foreign keys, indexes, maximum string lengths, Postgre
 
 ### Configuration and marker changes
 
-- Before shortening the planning range or removing a course weekday, calculate affected assignments and require an explicit resolution before applying a destructive change.
+- Before shortening a school year's planning range or removing a course weekday, calculate affected assignments and require an explicit resolution before applying a destructive change.
 - When adding a global holiday/event to an occupied date, calculate and cascade the affected schedule separately for every course. Skip each course's other fixed dates and stop when enough eligible free days have been used.
 - When adding an exam to an occupied date, cascade only the selected course's affected schedule using the same rules.
 - Reject a global marker if any course has an exam on that date, and reject an exam if the date has a global marker.
 - If any affected course lacks sufficient later capacity, reject and roll back the entire marker change, including shifts already calculated for other courses.
 - Changing marker colour or text does not recalculate the schedule.
+
+### Roll over a course to another school year
+
+- Accept a source course belonging to the currently selected school year, a target school year, a target start date, and one target lesson weekday. The source-course picker is limited to courses in the selected school year and defaults to the course currently shown when one is selected.
+- Default the target start date to the target school year's planning start whenever the target school year changes. The user may choose a later date within that school year's inclusive planning range.
+- Create a new target course by copying the source course's name and description. Configure it with the explicitly selected target lesson weekday; do not copy the source course's weekday configuration because the target lesson day may be different.
+- Copy every topic definition and topic instance to the new course. Keep copied unplanned instances unplanned. Order copied scheduled instances by source assignment date and place them, one after another, into eligible target slots beginning with the first selected target lesson weekday on or after the target start date.
+- Determine eligible target slots from the target school year's planning range and global holiday/event markers. Skip target holidays/events. Do not copy source or target exams; the newly created target course therefore starts without exams.
+- Preserve repeated topic instances and their relative order. The new definitions and instances are independent copies, so later edits or planning changes in either course do not affect the other.
+- Reject a rollover if the start date is outside the target school year or the target course name conflicts with an existing course in that school year.
+- If fewer eligible target slots remain than there are copied scheduled instances, fill every available slot in source chronological order and leave all remaining copied instances unplanned in the target course's topic list. Insufficient capacity is a successful partial rollout, not a validation failure.
+- Create the target course, copied topics/instances, and assignments in one transaction. On any validation or persistence failure, roll back the entire rollover and leave the source course unchanged.
 
 The service should return an impact result containing the inserted/removed assignment, displaced topics, affected dates, and any topic that became unplanned. The frontend uses this result to refresh state and communicate what changed.
 
@@ -135,7 +149,8 @@ The service should return an impact result containing the inserted/removed assig
 
 Define resource endpoints for:
 
-- Configuration and planning range.
+- Display configuration and school-year planning ranges.
+- School years.
 - Courses and course weekdays.
 - Global holiday/event markers.
 - Course-specific exams.
@@ -150,6 +165,7 @@ Define command endpoints rather than exposing raw assignment CRUD for:
 - Drag a scheduled topic using both `deleteShiftsSchedule` and `insertShiftsSchedule`.
 - Add global markers and course exams through planning commands that resolve affected assignments atomically.
 - Resolve assignments affected by planning-range or course-weekday changes.
+- Roll over a course into a target school year using a target start date and target lesson weekday, returning the created course and copied assignment summary.
 - Export a schedule as `text/csv`.
 
 Return validation conflicts such as occupied/fixed dates, insufficient remaining slots, and concurrent updates as structured Problem Details responses. Keep command contracts explicit so the frontend cannot accidentally bypass planning logic.
@@ -159,7 +175,7 @@ Return validation conflicts such as occupied/fixed dates, insufficient remaining
 Create an Angular Material application shell containing:
 
 - A course selector and access to course/configuration management.
-- An **All topics** course-view option that renders placed topics from every course and identifies each topic's course.
+- A school-year selector and an **All topics** course-view option that renders placed topics from every course in that school year and identifies each topic's course.
 - A schedule board with sticky ISO week/date labels, week rows, weekday columns, and topic cards in eligible cells.
 - Global holiday/event colours, icons, labels, and editing controls on the shared time axis, plus course-specific exam controls in the selected course view.
 - An alphabetically sorted topic-management panel containing only unplanned topics, with create, edit, delete, search, and drag handles.
@@ -171,6 +187,7 @@ Create an Angular Material application shell containing:
 - Keyboard-accessible place, move earlier/later, copy, and remove controls using the same API commands as drag-and-drop.
 - The forward-arrow action is a dedicated one-slot forward shift: it leaves the source lesson day empty and cascades the destination sequence forward, independent of the two general drag/drop checkboxes.
 - A **Copy** action on each scheduled topic card that puts one copied, unplanned instance into the topic list.
+- A course-rollover form containing a source course from the currently selected school year, a target school year, a target start date defaulting to that school year's planning start, and a target lesson weekday. Changing the target school year resets the default start date; the user can then override it.
 - CSV export for the selected course/date range.
 - Clear capacity/conflict errors and progress states. Overwrite mode intentionally does not show a confirmation dialog.
 - Management tabs ordered as Topic management, Course exam, Global holiday, Courses, Planning range, and Options; topic search/list precedes topic add/edit controls.
@@ -258,6 +275,41 @@ Verification: the selected-course view connects the alphabetic unplanned list an
 
 **Exit criterion:** planning, overwrite, insertion shift, deletion with/without shift, copying, and drag workflows operate without manual date repair.
 
+### Phase 5.1 — Model extension: School year
+
+**Implementation status:** completed and verified on 2026-08-17.
+
+- Introduce **SchoolYear** with a name and inclusive planning start/end dates.
+- Move ownership of the planning range from global application configuration to SchoolYear.
+- Make every course belong to exactly one school year; course names are unique within a school year.
+- Make global holiday/event markers belong to a school year and remain shared by every course in that school year.
+- When a course is selected, display its corresponding school year and calendar range automatically.
+- Add an explicit school-year selector for the read-only **All topics** view and for creating courses and global markers.
+- Keep course exams course-specific. The course-rollover phase copies the ordered topic sequence into a target school year but does not copy holidays or exams.
+- Replace the development database with a fresh baseline schema; no migration of the existing test data is required.
+
+Verification: the prior migration history and development data were removed and replaced by the `SchoolYearBaseline` schema. Backend integration tests prove school-year-specific ranges, same-named courses across years, marker isolation, and automatic course-to-school-year calendar selection. The Angular UI manages school years, scopes courses/markers/imports to the selected year, and exposes an explicit year selector for the all-topics view.
+
+**Exit criterion:** multiple school years can coexist, each course/calendar/marker query is scoped to one school year, and selecting a course selects its school year without requiring an archive flag.
+
+### Phase 5.2 — Course rollover
+
+**Implementation status:** completed and verified on 2026-08-17.
+
+- Add a rollover workflow whose source course is selected only from the currently selected school year and defaults to the currently displayed course.
+- Request the target school year, target start date, and target lesson weekday. Default the start date to the target school year's planning start and reset that default when the target year changes.
+- Add a transactional planning-service command that creates the target course with the copied name/description and the selected target lesson weekday.
+- Copy all topic definitions and instances. Keep copied unplanned instances unplanned; place copied scheduled instances in their source chronological order on consecutive eligible target lesson slots from the requested start date.
+- Use the target school year's planning range and global holiday/event markers while rolling out the schedule. Do not clone global markers or course exams.
+- Validate target-year/name conflicts, date range, and repeated-instance preservation before committing; calculate how many scheduled instances fit in the available target capacity.
+- When capacity is insufficient, assign as many instances as possible in source chronological order and put the remaining copied instances into the target course's unplanned topic list.
+- Return a summary containing the created course, copied topic/instance counts, assignment count, first/last assigned dates, and skipped target fixed days.
+- Add integration and Angular workflow tests, including a changed lesson weekday, target holidays, an overridden start date, repeated topics, existing unplanned topics, and insufficient capacity with overflow returned to the topic list.
+
+Verification: the planning API exposes one serializable transaction that copies the course, definitions, repeated instances, unplanned instances, and chronological assignment sequence. PostgreSQL integration tests prove a different target weekday, target-holiday skipping, unchanged source data, overflow into the target topic list, and rollback for invalid dates or duplicate target names. Angular tests prove target-year start-date defaults and submission of the independently selected lesson weekday. The complete backend and frontend regression suites pass.
+
+**Exit criterion:** a course remains intact as historical documentation while an independent copy—with all topics and the same scheduled topic order—is rolled into a selected school year from a selected start date on a potentially different lesson weekday, skipping the target year's holidays and copying no exams. If the target range fills up, the remaining copied instances are available in the target topic list.
+
 ### Phase 6 — CSV export and production hardening
 
 - Implement escaped, UTF-8 CSV generation from backend query results and download from Angular.
@@ -288,6 +340,8 @@ Verification: the selected-course view connects the alphabetic unplanned list an
 - Global holiday/event creation across multiple occupied course schedules, including independent forward cascades and whole-command rollback if one course lacks capacity.
 - Course-exam creation with single-course shifting.
 - Rejection of global markers conflicting with any existing course exam and exams conflicting with a global marker.
+- Course rollover onto a different weekday, preserving chronological scheduled-topic and repeated-instance order while skipping target holidays and retaining copied unplanned instances as unplanned.
+- Course rollover with insufficient-capacity overflow in the target topic list, plus name/date validation rollback without changing the source course.
 
 ### API and PostgreSQL integration tests
 
@@ -297,6 +351,7 @@ Verification: the selected-course view connects the alphabetic unplanned list an
 - Transaction rollback during a failed multi-assignment shift.
 - Date-only mapping and ISO-boundary queries.
 - Optimistic-concurrency conflicts and Problem Details responses.
+- Atomic course rollover persistence and rollback against the target school year's real marker/calendar data.
 - CSV escaping for commas, quotes, line breaks, Unicode, and empty fields.
 
 ### Angular and end-to-end tests
@@ -308,6 +363,7 @@ Verification: the selected-course view connects the alphabetic unplanned list an
 - Copy a scheduled topic, verify the copy appears in the list, and schedule it on another date.
 - Perform checkbox-aware schedule moves using drag-and-drop and keyboard/button controls.
 - Add a global marker on an occupied date and verify every affected course shifts; add an exam and verify only its course shifts.
+- Roll over a course into another school year using a different target lesson weekday; verify the default/overridden start date, target-holiday skipping, ordered copied assignments, unplanned topics, and absence of copied exams.
 - Export and parse the selected course's CSV.
 - Reload and verify server persistence.
 - Run the complete workflow against the production Docker Compose stack.
@@ -328,6 +384,7 @@ The MVP is complete when a user can:
 - Use **Copy** on a scheduled topic to put another independently schedulable instance into the unplanned list and later schedule it on another eligible day.
 - Move scheduled topics with drag-and-drop or accessible controls; the operation respects both shift checkboxes.
 - Add a holiday/event to an occupied date and have every affected course shift forward atomically; add an exam and have only its course shift. A capacity or exclusivity error leaves every schedule and marker unchanged.
+- Roll over a course from the selected school year into a target school year, choosing a start date and lesson weekday, while keeping the source unchanged and preserving the scheduled topic sequence across the target year's eligible non-holiday lesson days.
 - Export the selected course schedule as CSV.
 - Reload without losing server-stored data.
 - Start the Angular, .NET 10 API, and PostgreSQL production stack with Docker Compose.

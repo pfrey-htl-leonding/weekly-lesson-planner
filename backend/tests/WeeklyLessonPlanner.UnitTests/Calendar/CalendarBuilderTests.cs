@@ -7,10 +7,11 @@ public sealed class CalendarBuilderTests
     [Fact]
     public void BuildsInclusiveIsoWeeksAcrossYearBoundary()
     {
-        var config = Config(new DateOnly(2020, 12, 31), new DateOnly(2021, 1, 5));
+        var schoolYear = Year(new DateOnly(2020, 12, 31), new DateOnly(2021, 1, 5));
 
         var view = CalendarBuilder.Build(
-            config,
+            schoolYear,
+            Config(),
             null,
             new HashSet<IsoWeekday>(),
             new Dictionary<DateOnly, GlobalDayMarkerDto>(),
@@ -33,10 +34,10 @@ public sealed class CalendarBuilderTests
         var courseId = Guid.NewGuid();
         var holidayDate = new DateOnly(2026, 9, 1);
         var examDate = new DateOnly(2026, 9, 2);
-        var config = Config(holidayDate, examDate);
+        var schoolYear = Year(holidayDate, examDate);
         var markers = new Dictionary<DateOnly, GlobalDayMarkerDto>
         {
-            [holidayDate] = new(Guid.NewGuid(), holidayDate, GlobalDayMarkerType.Holiday, "School closed")
+            [holidayDate] = new(Guid.NewGuid(), schoolYear.Id, holidayDate, GlobalDayMarkerType.Holiday, "School closed")
         };
         var exams = new Dictionary<DateOnly, CourseExamDto>
         {
@@ -44,14 +45,16 @@ public sealed class CalendarBuilderTests
         };
 
         var selected = CalendarBuilder.Build(
-            config,
+            schoolYear,
+            Config(),
             courseId,
             new HashSet<IsoWeekday> { IsoWeekday.Tuesday },
             markers,
             exams,
             new Dictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>>());
         var allCourses = CalendarBuilder.Build(
-            config,
+            schoolYear,
+            Config(),
             null,
             new HashSet<IsoWeekday>(),
             markers,
@@ -81,7 +84,8 @@ public sealed class CalendarBuilderTests
         };
 
         var view = CalendarBuilder.Build(
-            Config(date, date),
+            Year(date, date),
+            Config(),
             null,
             new HashSet<IsoWeekday>(),
             new Dictionary<DateOnly, GlobalDayMarkerDto>(),
@@ -91,9 +95,10 @@ public sealed class CalendarBuilderTests
         Assert.Equal(["Course A", "Course B"], Day(view, date).ScheduledTopics.Select(topic => topic.CourseName));
     }
 
-    private static AppConfigDto Config(DateOnly start, DateOnly end) => new(
-        start,
-        end,
+    private static SchoolYearDto Year(DateOnly start, DateOnly end) =>
+        new(Guid.NewGuid(), "Test year", start, end);
+
+    private static AppConfigDto Config() => new(
         [IsoWeekday.Monday, IsoWeekday.Tuesday, IsoWeekday.Wednesday, IsoWeekday.Thursday, IsoWeekday.Friday],
         "#008000",
         "#0000ff",

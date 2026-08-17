@@ -83,6 +83,7 @@ public sealed class Phase4PlanningTests
             var second = await CreateAndPlaceAsync(topics, planning, secondCourse.Id, "Second A", dates[0]);
 
             marker = await planning.CreateGlobalMarkerAsync(new(
+                SchoolYear.DefaultId,
                 dates[0],
                 GlobalDayMarkerType.Holiday,
                 "Shift both"));
@@ -189,6 +190,7 @@ public sealed class Phase4PlanningTests
 
     private static async Task<CourseDto> CreateCourseAsync(CalendarService calendar, IsoWeekday weekday) =>
         await calendar.CreateCourseAsync(new(
+            SchoolYear.DefaultId,
             $"Phase 4 {Guid.NewGuid():N}",
             "Integration test",
             [weekday]));
@@ -199,13 +201,13 @@ public sealed class Phase4PlanningTests
         int count,
         bool requireGloballyUnassigned = false)
     {
-        var config = await dbContext.AppConfigs.AsNoTracking().SingleAsync();
+        var schoolYear = await dbContext.SchoolYears.AsNoTracking().SingleAsync(item => item.Id == SchoolYear.DefaultId);
         var blocked = (await dbContext.GlobalDayMarkers.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
         var assigned = requireGloballyUnassigned
             ? (await dbContext.TopicAssignments.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet()
             : [];
-        var dates = Enumerable.Range(0, config.PlanningEnd.DayNumber - config.PlanningStart.DayNumber + 1)
-            .Select(config.PlanningStart.AddDays)
+        var dates = Enumerable.Range(0, schoolYear.PlanningEnd.DayNumber - schoolYear.PlanningStart.DayNumber + 1)
+            .Select(schoolYear.PlanningStart.AddDays)
             .Where(date => ToIsoWeekday(date) == weekday && !blocked.Contains(date) && !assigned.Contains(date))
             .ToArray();
         return count == int.MaxValue ? dates : dates.Take(count).ToArray();

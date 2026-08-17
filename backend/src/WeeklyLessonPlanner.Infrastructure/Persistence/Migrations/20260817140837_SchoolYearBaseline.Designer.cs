@@ -12,8 +12,8 @@ using WeeklyLessonPlanner.Infrastructure.Persistence;
 namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PlannerDbContext))]
-    [Migration("20260813144709_Phase2CalendarModel")]
-    partial class Phase2CalendarModel
+    [Migration("20260817140837_SchoolYearBaseline")]
+    partial class SchoolYearBaseline
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -48,12 +48,6 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<DateOnly>("PlanningEnd")
-                        .HasColumnType("date");
-
-                    b.Property<DateOnly>("PlanningStart")
-                        .HasColumnType("date");
-
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -67,8 +61,6 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
 
                     b.ToTable("app_config", null, t =>
                         {
-                            t.HasCheckConstraint("ck_app_config_range", "\"PlanningStart\" <= \"PlanningEnd\"");
-
                             t.HasCheckConstraint("ck_app_config_singleton", "\"Id\" = 1");
 
                             t.HasCheckConstraint("ck_app_config_weekdays", "\"VisibleWeekdaysMask\" BETWEEN 1 AND 127");
@@ -81,8 +73,6 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                             EventColor = "#1565c0",
                             ExamColor = "#ed6c02",
                             HolidayColor = "#2e7d32",
-                            PlanningEnd = new DateOnly(2027, 6, 30),
-                            PlanningStart = new DateOnly(2026, 9, 1),
                             Version = 0u,
                             VisibleWeekdaysMask = 31
                         });
@@ -104,6 +94,9 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<Guid>("SchoolYearId")
+                        .HasColumnType("uuid");
+
                     b.Property<uint>("Version")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAddOrUpdate()
@@ -112,7 +105,7 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Name")
+                    b.HasIndex("SchoolYearId", "Name")
                         .IsUnique();
 
                     b.ToTable("courses", (string)null);
@@ -213,6 +206,9 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<Guid>("SchoolYearId")
+                        .HasColumnType("uuid");
+
                     b.Property<int>("Type")
                         .HasColumnType("integer");
 
@@ -224,12 +220,56 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Date")
+                    b.HasIndex("SchoolYearId", "Date")
                         .IsUnique();
 
                     b.ToTable("global_day_markers", null, t =>
                         {
                             t.HasCheckConstraint("ck_global_marker_type", "\"Type\" IN (1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.SchoolYear", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateOnly>("PlanningEnd")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("PlanningStart")
+                        .HasColumnType("date");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("school_years", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_school_year_range", "\"PlanningStart\" <= \"PlanningEnd\"");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("6f708a97-c4e2-4a72-9652-aaf16f983d3f"),
+                            Name = "2026/27",
+                            PlanningEnd = new DateOnly(2027, 6, 30),
+                            PlanningStart = new DateOnly(2026, 9, 1),
+                            Version = 0u
                         });
                 });
 
@@ -325,6 +365,17 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("topic_instances", (string)null);
                 });
 
+            modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.Course", b =>
+                {
+                    b.HasOne("WeeklyLessonPlanner.Infrastructure.Persistence.SchoolYear", "SchoolYear")
+                        .WithMany("Courses")
+                        .HasForeignKey("SchoolYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SchoolYear");
+                });
+
             modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.CourseExam", b =>
                 {
                     b.HasOne("WeeklyLessonPlanner.Infrastructure.Persistence.Course", "Course")
@@ -345,6 +396,17 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Course");
+                });
+
+            modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.GlobalDayMarker", b =>
+                {
+                    b.HasOne("WeeklyLessonPlanner.Infrastructure.Persistence.SchoolYear", "SchoolYear")
+                        .WithMany("GlobalDayMarkers")
+                        .HasForeignKey("SchoolYearId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SchoolYear");
                 });
 
             modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.Topic", b =>
@@ -389,6 +451,13 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                     b.Navigation("Topics");
 
                     b.Navigation("Weekdays");
+                });
+
+            modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.SchoolYear", b =>
+                {
+                    b.Navigation("Courses");
+
+                    b.Navigation("GlobalDayMarkers");
                 });
 
             modelBuilder.Entity("WeeklyLessonPlanner.Infrastructure.Persistence.Topic", b =>

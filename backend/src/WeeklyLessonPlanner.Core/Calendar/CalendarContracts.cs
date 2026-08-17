@@ -26,8 +26,6 @@ public enum EffectiveDayState
 }
 
 public sealed record AppConfigDto(
-    DateOnly PlanningStart,
-    DateOnly PlanningEnd,
     IReadOnlyList<IsoWeekday> VisibleWeekdays,
     string HolidayColor,
     string EventColor,
@@ -35,36 +33,50 @@ public sealed record AppConfigDto(
     string WeekNumbering = "ISO 8601");
 
 public sealed record UpdateAppConfigCommand(
-    DateOnly PlanningStart,
-    DateOnly PlanningEnd,
     IReadOnlyList<IsoWeekday> VisibleWeekdays,
     string HolidayColor,
     string EventColor,
     string ExamColor);
 
+public sealed record SchoolYearDto(
+    Guid Id,
+    string Name,
+    DateOnly PlanningStart,
+    DateOnly PlanningEnd);
+
+public sealed record SaveSchoolYearCommand(
+    string Name,
+    DateOnly PlanningStart,
+    DateOnly PlanningEnd);
+
 public sealed record CourseDto(
     Guid Id,
+    Guid SchoolYearId,
     string Name,
     string Description,
     IReadOnlyList<IsoWeekday> Weekdays);
 
 public sealed record SaveCourseCommand(
+    Guid SchoolYearId,
     string Name,
     string Description,
     IReadOnlyList<IsoWeekday> Weekdays);
 
 public sealed record GlobalDayMarkerDto(
     Guid Id,
+    Guid SchoolYearId,
     DateOnly Date,
     GlobalDayMarkerType Type,
     string? Label);
 
 public sealed record SaveGlobalDayMarkerCommand(
+    Guid SchoolYearId,
     DateOnly Date,
     GlobalDayMarkerType Type,
     string? Label);
 
 public sealed record SaveGlobalDayMarkerRangeCommand(
+    Guid SchoolYearId,
     DateOnly From,
     DateOnly Until,
     GlobalDayMarkerType Type,
@@ -103,6 +115,8 @@ public sealed record CalendarWeekDto(
 public sealed record CalendarViewDto(
     DateOnly PlanningStart,
     DateOnly PlanningEnd,
+    Guid SchoolYearId,
+    string SchoolYearName,
     Guid? CourseId,
     IReadOnlyList<IsoWeekday> VisibleWeekdays,
     IReadOnlyList<CalendarWeekDto> Weeks);

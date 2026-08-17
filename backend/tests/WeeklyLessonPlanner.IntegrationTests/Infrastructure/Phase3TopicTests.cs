@@ -21,6 +21,7 @@ public sealed class Phase3TopicTests
         var planning = new PlanningService(dbContext);
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var course = await calendar.CreateCourseAsync(new(
+            SchoolYear.DefaultId,
             $"Topic course {suffix}",
             "Phase 3 integration test",
             [IsoWeekday.Wednesday]));
@@ -44,8 +45,8 @@ public sealed class Phase3TopicTests
             await dbContext.SaveChangesAsync();
 
             Assert.Empty(await topics.GetUnplannedInstancesAsync(course.Id, null));
-            var aggregateView = await calendar.GetCalendarAsync(null);
-            var selectedView = await calendar.GetCalendarAsync(course.Id);
+            var aggregateView = await calendar.GetCalendarAsync(null, SchoolYear.DefaultId);
+            var selectedView = await calendar.GetCalendarAsync(course.Id, null);
             Assert.Equal("Binary search", FindDay(aggregateView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().Heading);
             Assert.Equal(course.Name, FindDay(selectedView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().CourseName);
             await Assert.ThrowsAsync<PlanningConflictException>(() =>
@@ -100,6 +101,7 @@ public sealed class Phase3TopicTests
         var topics = new TopicService(dbContext);
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var course = await calendar.CreateCourseAsync(new(
+            SchoolYear.DefaultId,
             $"Alphabetic course {suffix}",
             string.Empty,
             [IsoWeekday.Monday]));

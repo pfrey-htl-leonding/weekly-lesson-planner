@@ -143,18 +143,158 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         return noOp;
     }
 
+    public async Task<CourseRolloverResultDto> RollOverCourseAsync(
+        CourseRolloverCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(command.TargetWeekday))
+        {
+            throw new ArgumentException("Target lesson weekday must be between Monday and Sunday.");
+        }
+
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var source = await dbContext.Courses
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(item => item.Topics)
+            .ThenInclude(item => item.Instances)
+            .ThenInclude(item => item.Assignment)
+            .SingleOrDefaultAsync(item => item.Id == command.SourceCourseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Source course not found.");
+        var targetSchoolYear = await dbContext.SchoolYears
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == command.TargetSchoolYearId, cancellationToken)
+            ?? throw new KeyNotFoundException("Target school year not found.");
+
+        EnsureDateInRange(command.TargetStartDate, targetSchoolYear);
+        if (await dbContext.Courses.AnyAsync(
+                item => item.SchoolYearId == targetSchoolYear.Id && item.Name == source.Name,
+                cancellationToken))
+        {
+            throw new PlanningConflictException(
+                $"A course named '{source.Name}' already exists in the target school year.");
+        }
+
+        var blockedDates = (await dbContext.GlobalDayMarkers
+                .AsNoTracking()
+                .Where(item => item.SchoolYearId == targetSchoolYear.Id)
+                .Select(item => item.Date)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        var eligibleSlots = Enumerable
+            .Range(0, targetSchoolYear.PlanningEnd.DayNumber - command.TargetStartDate.DayNumber + 1)
+            .Select(command.TargetStartDate.AddDays)
+            .Where(date => ToIsoWeekday(date) == command.TargetWeekday && !blockedDates.Contains(date))
+            .ToArray();
+        var scheduledSourceInstances = source.Topics
+            .SelectMany(item => item.Instances)
+            .Where(item => item.Assignment is not null)
+            .OrderBy(item => item.Assignment!.Date)
+            .ToArray();
+        var assignmentCount = Math.Min(eligibleSlots.Length, scheduledSourceInstances.Length);
+
+        var targetCourse = new Course
+        {
+            Id = Guid.NewGuid(),
+            SchoolYearId = targetSchoolYear.Id,
+            Name = source.Name,
+            Description = source.Description,
+            Weekdays =
+            [
+                new CourseWeekday
+                {
+                    Weekday = command.TargetWeekday
+                }
+            ]
+        };
+        var copiedInstances = new Dictionary<Guid, TopicInstance>();
+        foreach (var sourceTopic in source.Topics)
+        {
+            var targetTopic = new Topic
+            {
+                Id = Guid.NewGuid(),
+                CourseId = targetCourse.Id,
+                Heading = sourceTopic.Heading,
+                Description = sourceTopic.Description,
+                Course = targetCourse
+            };
+            targetCourse.Topics.Add(targetTopic);
+
+            foreach (var sourceInstance in sourceTopic.Instances)
+            {
+                var targetInstance = new TopicInstance
+                {
+                    Id = Guid.NewGuid(),
+                    TopicId = targetTopic.Id,
+                    CourseId = targetCourse.Id,
+                    Topic = targetTopic
+                };
+                targetTopic.Instances.Add(targetInstance);
+                copiedInstances.Add(sourceInstance.Id, targetInstance);
+            }
+        }
+
+        for (var index = 0; index < assignmentCount; index++)
+        {
+            var targetInstance = copiedInstances[scheduledSourceInstances[index].Id];
+            targetInstance.Assignment = new TopicAssignment
+            {
+                Id = Guid.NewGuid(),
+                TopicInstanceId = targetInstance.Id,
+                CourseId = targetCourse.Id,
+                Date = eligibleSlots[index],
+                TopicInstance = targetInstance
+            };
+        }
+
+        dbContext.Courses.Add(targetCourse);
+        await SaveConflictSafeAsync(
+            "The target course could not be created because its data conflicts with an existing course.",
+            cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+
+        var lastAssignedDate = assignmentCount > 0
+            ? eligibleSlots[assignmentCount - 1]
+            : (DateOnly?)null;
+        var skippedThrough = scheduledSourceInstances.Length > assignmentCount
+            ? targetSchoolYear.PlanningEnd
+            : lastAssignedDate;
+        var skippedFixedDates = skippedThrough.HasValue && scheduledSourceInstances.Length > 0
+            ? blockedDates
+                .Where(date => date >= command.TargetStartDate &&
+                    date <= skippedThrough.Value &&
+                    ToIsoWeekday(date) == command.TargetWeekday)
+                .Order()
+                .ToArray()
+            : [];
+        return new CourseRolloverResultDto(
+            new CourseDto(
+                targetCourse.Id,
+                targetCourse.SchoolYearId,
+                targetCourse.Name,
+                targetCourse.Description,
+                [command.TargetWeekday]),
+            source.Topics.Count,
+            copiedInstances.Count,
+            assignmentCount,
+            assignmentCount > 0 ? eligibleSlots[0] : null,
+            lastAssignedDate,
+            skippedFixedDates);
+    }
+
     public async Task<GlobalDayMarkerDto> CreateGlobalMarkerAsync(
         SaveGlobalDayMarkerCommand command,
         CancellationToken cancellationToken = default)
     {
         ValidateMarker(command);
         await using var transaction = await BeginTransactionAsync(cancellationToken);
-        await ValidateMarkerDatesAsync([command.Date], null, cancellationToken);
-        await ShiftForGlobalFixedDatesAsync(new HashSet<DateOnly> { command.Date }, null, cancellationToken);
+        await ValidateMarkerDatesAsync(command.SchoolYearId, [command.Date], null, cancellationToken);
+        await ShiftForGlobalFixedDatesAsync(command.SchoolYearId, new HashSet<DateOnly> { command.Date }, null, cancellationToken);
 
         var marker = new GlobalDayMarker
         {
             Id = Guid.NewGuid(),
+            SchoolYearId = command.SchoolYearId,
             Date = command.Date,
             Type = command.Type,
             Label = NormalizeOptional(command.Label)
@@ -169,7 +309,7 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         SaveGlobalDayMarkerRangeCommand command,
         CancellationToken cancellationToken = default)
     {
-        ValidateMarker(new SaveGlobalDayMarkerCommand(command.From, command.Type, command.Label));
+        ValidateMarker(new SaveGlobalDayMarkerCommand(command.SchoolYearId, command.From, command.Type, command.Label));
         if (command.Until < command.From)
         {
             throw new ArgumentException("Until must be on or after On/From.");
@@ -179,12 +319,13 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             .Select(command.From.AddDays)
             .ToArray();
         await using var transaction = await BeginTransactionAsync(cancellationToken);
-        await ValidateMarkerDatesAsync(dates, null, cancellationToken);
-        await ShiftForGlobalFixedDatesAsync(dates.ToHashSet(), null, cancellationToken);
+        await ValidateMarkerDatesAsync(command.SchoolYearId, dates, null, cancellationToken);
+        await ShiftForGlobalFixedDatesAsync(command.SchoolYearId, dates.ToHashSet(), null, cancellationToken);
 
         var markers = dates.Select(date => new GlobalDayMarker
         {
             Id = Guid.NewGuid(),
+            SchoolYearId = command.SchoolYearId,
             Date = date,
             Type = command.Type,
             Label = NormalizeOptional(command.Label)
@@ -208,10 +349,15 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             return null;
         }
 
-        await ValidateMarkerDatesAsync([command.Date], id, cancellationToken);
+        if (marker.SchoolYearId != command.SchoolYearId)
+        {
+            throw new PlanningConflictException("A marker cannot be moved to another school year.");
+        }
+
+        await ValidateMarkerDatesAsync(command.SchoolYearId, [command.Date], id, cancellationToken);
         if (marker.Date != command.Date)
         {
-            await ShiftForGlobalFixedDatesAsync(new HashSet<DateOnly> { command.Date }, id, cancellationToken);
+            await ShiftForGlobalFixedDatesAsync(command.SchoolYearId, new HashSet<DateOnly> { command.Date }, id, cancellationToken);
         }
 
         marker.Date = command.Date;
@@ -327,12 +473,13 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
     }
 
     private async Task ShiftForGlobalFixedDatesAsync(
+        Guid schoolYearId,
         IReadOnlySet<DateOnly> blockedDates,
         Guid? ignoredMarkerId,
         CancellationToken cancellationToken)
     {
         var affectedCourses = await dbContext.TopicAssignments
-            .Where(item => blockedDates.Contains(item.Date))
+            .Where(item => item.TopicInstance.Topic.Course.SchoolYearId == schoolYearId && blockedDates.Contains(item.Date))
             .Select(item => item.CourseId)
             .Distinct()
             .ToListAsync(cancellationToken);
@@ -391,7 +538,10 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         Guid? ignoredExamId = null,
         CancellationToken cancellationToken = default)
     {
-        var config = await dbContext.AppConfigs.SingleAsync(item => item.Id == AppConfig.SingletonId, cancellationToken);
+        var course = await dbContext.Courses.AsNoTracking()
+            .Include(item => item.SchoolYear)
+            .SingleOrDefaultAsync(item => item.Id == courseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Course not found.");
         var weekdays = (await dbContext.CourseWeekdays
                 .Where(item => item.CourseId == courseId)
                 .Select(item => item.Weekday)
@@ -399,16 +549,11 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             .ToHashSet();
         if (weekdays.Count == 0)
         {
-            if (!await dbContext.Courses.AnyAsync(item => item.Id == courseId, cancellationToken))
-            {
-                throw new KeyNotFoundException("Course not found.");
-            }
-
             throw new PlanningConflictException("The course has no eligible teaching weekdays.");
         }
 
         var blockedDates = (await dbContext.GlobalDayMarkers
-                .Where(item => item.Id != ignoredMarkerId)
+                .Where(item => item.SchoolYearId == course.SchoolYearId && item.Id != ignoredMarkerId)
                 .Select(item => item.Date)
                 .ToListAsync(cancellationToken))
             .ToHashSet();
@@ -419,8 +564,8 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         blockedDates.UnionWith(additionalBlockedDates);
 
         var eligibleSlots = Enumerable
-            .Range(0, config.PlanningEnd.DayNumber - config.PlanningStart.DayNumber + 1)
-            .Select(config.PlanningStart.AddDays)
+            .Range(0, course.SchoolYear.PlanningEnd.DayNumber - course.SchoolYear.PlanningStart.DayNumber + 1)
+            .Select(course.SchoolYear.PlanningStart.AddDays)
             .Where(date => weekdays.Contains(ToIsoWeekday(date)) && !blockedDates.Contains(date))
             .ToArray();
         var assignments = await dbContext.TopicAssignments
@@ -538,24 +683,27 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
     }
 
     private async Task ValidateMarkerDatesAsync(
+        Guid schoolYearId,
         IReadOnlyCollection<DateOnly> dates,
         Guid? markerId,
         CancellationToken cancellationToken)
     {
-        var config = await dbContext.AppConfigs.SingleAsync(item => item.Id == AppConfig.SingletonId, cancellationToken);
-        if (dates.Any(date => date < config.PlanningStart || date > config.PlanningEnd))
+        var schoolYear = await dbContext.SchoolYears.SingleOrDefaultAsync(item => item.Id == schoolYearId, cancellationToken)
+            ?? throw new KeyNotFoundException("School year not found.");
+        if (dates.Any(date => date < schoolYear.PlanningStart || date > schoolYear.PlanningEnd))
         {
             throw new ArgumentException("The complete marker range must be inside the inclusive planning range.");
         }
 
         if (await dbContext.GlobalDayMarkers.AnyAsync(
-                item => dates.Contains(item.Date) && item.Id != markerId,
+                item => item.SchoolYearId == schoolYearId && dates.Contains(item.Date) && item.Id != markerId,
                 cancellationToken))
         {
             throw new PlanningConflictException("A holiday or event already exists in the selected date range.");
         }
 
-        if (await dbContext.CourseExams.AnyAsync(item => dates.Contains(item.Date), cancellationToken))
+        if (await dbContext.CourseExams.AnyAsync(
+                item => item.Course.SchoolYearId == schoolYearId && dates.Contains(item.Date), cancellationToken))
         {
             throw new PlanningConflictException("A global marker cannot coexist with a course exam on this date.");
         }
@@ -566,13 +714,13 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         Guid? examId,
         CancellationToken cancellationToken)
     {
-        await EnsureDateInRangeAsync(command.Date, cancellationToken);
-        if (!await dbContext.Courses.AnyAsync(item => item.Id == command.CourseId, cancellationToken))
-        {
-            throw new KeyNotFoundException("Course not found.");
-        }
+        var course = await dbContext.Courses.AsNoTracking().Include(item => item.SchoolYear)
+            .SingleOrDefaultAsync(item => item.Id == command.CourseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Course not found.");
+        EnsureDateInRange(command.Date, course.SchoolYear);
 
-        if (await dbContext.GlobalDayMarkers.AnyAsync(item => item.Date == command.Date, cancellationToken))
+        if (await dbContext.GlobalDayMarkers.AnyAsync(
+                item => item.SchoolYearId == course.SchoolYearId && item.Date == command.Date, cancellationToken))
         {
             throw new PlanningConflictException("An exam cannot coexist with a global marker on this date.");
         }
@@ -585,10 +733,9 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         }
     }
 
-    private async Task EnsureDateInRangeAsync(DateOnly date, CancellationToken cancellationToken)
+    private static void EnsureDateInRange(DateOnly date, SchoolYear schoolYear)
     {
-        var config = await dbContext.AppConfigs.SingleAsync(item => item.Id == AppConfig.SingletonId, cancellationToken);
-        if (date < config.PlanningStart || date > config.PlanningEnd)
+        if (date < schoolYear.PlanningStart || date > schoolYear.PlanningEnd)
         {
             throw new ArgumentException("The date must be inside the inclusive planning range.");
         }

@@ -2,7 +2,7 @@
   <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
   <span>Weekly Lesson Planner</span>
   <span class="toolbar-spacer"></span>
-  <span class="phase-label">Interactive planning · Phase 5</span>
+  <span class="phase-label">Course rollover · Phase 5.2</span>
 </mat-toolbar>
 
 <main class="app-content">
@@ -99,6 +99,7 @@
 
           <mat-tab label="Global holiday">
             <div class="tab-content form-grid">
+              <p class="field-note">Markers apply to {{ selectedSchoolYear()?.name || 'the selected school year' }}.</p>
               <div class="date-range-fields">
                 <mat-form-field><mat-label>On/From</mat-label><input matInput type="date" [(ngModel)]="markerDraft.date"></mat-form-field>
                 <mat-form-field><mat-label>Until</mat-label><input matInput type="date" [(ngModel)]="markerDraft.until"></mat-form-field>
@@ -120,6 +121,7 @@
 
           <mat-tab label="Courses">
             <div class="tab-content form-grid">
+              <mat-form-field><mat-label>School year</mat-label><mat-select [(ngModel)]="courseDraft.schoolYearId" [disabled]="!!editingCourseId">@for (schoolYear of schoolYears; track schoolYear.id) { <mat-option [value]="schoolYear.id">{{ schoolYear.name }}</mat-option> }</mat-select></mat-form-field>
               <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="courseDraft.name" maxlength="100"></mat-form-field>
               <mat-form-field><mat-label>Description</mat-label><textarea matInput [(ngModel)]="courseDraft.description" rows="2"></textarea></mat-form-field>
               <div class="weekday-group">
@@ -133,20 +135,77 @@
                 @if (editingCourseId) { <button mat-button (click)="selectCourse(null)">Cancel</button> }
               </div>
               <div class="resource-list">
-                @for (course of courses; track course.id) {
+                @for (course of coursesForSelectedSchoolYear(); track course.id) {
                   <div><button mat-button (click)="selectCourse(course)">{{ course.name }}</button><span>{{ courseWeekdays(course) }}</span><button mat-icon-button aria-label="Delete course" (click)="deleteCourse(course)"><mat-icon>delete</mat-icon></button></div>
                 } @empty { <p>No courses yet.</p> }
               </div>
             </div>
           </mat-tab>
 
-          <mat-tab label="Planning range">
+          <mat-tab label="Course rollover">
             <div class="tab-content form-grid">
-              @if (config) {
-                <mat-form-field><mat-label>Start</mat-label><input matInput type="date" [(ngModel)]="config.planningStart"></mat-form-field>
-                <mat-form-field><mat-label>End</mat-label><input matInput type="date" [(ngModel)]="config.planningEnd"></mat-form-field>
-                <button mat-flat-button (click)="saveConfig()" [disabled]="busy">Save planning range</button>
+              <p class="field-note">The source remains unchanged. Scheduled topics are copied in order; holidays and exams are not copied.</p>
+              <mat-form-field>
+                <mat-label>Original course</mat-label>
+                <mat-select [(ngModel)]="rolloverDraft.sourceCourseId">
+                  @for (course of rolloverSourceCourses(); track course.id) {
+                    <mat-option [value]="course.id">{{ course.name }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Courses from {{ selectedSchoolYear()?.name || 'the selected school year' }}</mat-hint>
+              </mat-form-field>
+              <mat-form-field>
+                <mat-label>Target school year</mat-label>
+                <mat-select [(ngModel)]="rolloverDraft.targetSchoolYearId" (selectionChange)="changeRolloverTargetYear()">
+                  @for (schoolYear of rolloverTargetSchoolYears(); track schoolYear.id) {
+                    <mat-option [value]="schoolYear.id">{{ schoolYear.name }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              @if (rolloverTargetSchoolYears().length === 0) {
+                <p class="field-note">Create another school year before rolling over a course.</p>
               }
+              <div class="date-range-fields">
+                <mat-form-field>
+                  <mat-label>Target start date</mat-label>
+                  <input matInput type="date" [(ngModel)]="rolloverDraft.targetStartDate" [min]="rolloverTargetSchoolYear()?.planningStart || null" [max]="rolloverTargetSchoolYear()?.planningEnd || null">
+                  <mat-hint>Defaults to the target school year's beginning.</mat-hint>
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Target lesson day</mat-label>
+                  <mat-select [(ngModel)]="rolloverDraft.targetWeekday">
+                    @for (day of weekdays; track day) {
+                      <mat-option [value]="day">{{ weekdayName(day) }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <button
+                mat-flat-button
+                (click)="rollOverCourse()"
+                [disabled]="busy || !rolloverDraft.sourceCourseId || !rolloverDraft.targetSchoolYearId || !rolloverDraft.targetStartDate">
+                Roll over course
+              </button>
+            </div>
+          </mat-tab>
+
+          <mat-tab label="School years">
+            <div class="tab-content form-grid">
+              <h3>{{ editingSchoolYearId ? 'Edit school year' : 'Add school year' }}</h3>
+              <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="schoolYearDraft.name" maxlength="100" placeholder="2027/28"></mat-form-field>
+              <div class="date-range-fields">
+                <mat-form-field><mat-label>Planning start</mat-label><input matInput type="date" [(ngModel)]="schoolYearDraft.planningStart"></mat-form-field>
+                <mat-form-field><mat-label>Planning end</mat-label><input matInput type="date" [(ngModel)]="schoolYearDraft.planningEnd"></mat-form-field>
+              </div>
+              <div class="button-row">
+                <button mat-flat-button (click)="saveSchoolYear()" [disabled]="busy">{{ editingSchoolYearId ? 'Update' : 'Add' }} school year</button>
+                @if (editingSchoolYearId) { <button mat-button (click)="selectSchoolYear(null)">Cancel</button> }
+              </div>
+              <div class="resource-list">
+                @for (schoolYear of schoolYears; track schoolYear.id) {
+                  <div><button mat-button (click)="selectSchoolYear(schoolYear)">{{ schoolYear.name }}</button><span>{{ schoolYear.planningStart }} – {{ schoolYear.planningEnd }}</span><button mat-icon-button [attr.aria-label]="'Delete school year ' + schoolYear.name" (click)="deleteSchoolYear(schoolYear)"><mat-icon>delete</mat-icon></button></div>
+                }
+              </div>
             </div>
           </mat-tab>
 
@@ -190,7 +249,7 @@
               @if (dataTransferKind === 'topics') {
                 <p class="field-note">Topics apply to the course selected in Course view.</p>
               } @else {
-                <p class="field-note">Imported courses use the visible weekdays configured in Options.</p>
+                <p class="field-note">Courses apply to {{ selectedSchoolYear()?.name || 'the selected school year' }} and use the visible weekdays configured in Options.</p>
               }
 
               <div class="button-row">
@@ -207,7 +266,10 @@
       <div class="calendar-heading">
         <div><h1>School-year calendar</h1><p>ISO 8601 weeks · global markers apply to every course</p></div>
         <div class="calendar-controls">
-          <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of courses; track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+          <div class="calendar-view-selectors">
+            <mat-form-field><mat-label>School year</mat-label><mat-select [(ngModel)]="selectedSchoolYearId" (selectionChange)="changeSchoolYearView()">@for (schoolYear of schoolYears; track schoolYear.id) { <mat-option [value]="schoolYear.id">{{ schoolYear.name }}</mat-option> }</mat-select></mat-form-field>
+            <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of coursesForSelectedSchoolYear(); track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+          </div>
           <div class="planning-options" aria-label="Schedule shift options">
             <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
             <mat-checkbox [(ngModel)]="deleteShiftsSchedule">Delete shifts schedule</mat-checkbox>

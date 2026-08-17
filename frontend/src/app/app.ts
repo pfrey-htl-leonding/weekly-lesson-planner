@@ -27,10 +27,12 @@ import {
   GlobalDayMarkerType,
   IsoWeekday,
   SaveCourse,
+  SaveSchoolYear,
+  SchoolYear,
   ScheduledTopic,
 } from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
-import { PlanningApi, PlanningImpact } from './core/api/planning-api';
+import { CourseRolloverCommand, PlanningApi, PlanningImpact } from './core/api/planning-api';
 import {
   parseNameDescriptionCsv,
   writeNameDescriptionCsv,
@@ -73,6 +75,7 @@ export class App implements OnInit {
   readonly states = EffectiveDayState;
 
   config: AppConfig | null = null;
+  schoolYears: SchoolYear[] = [];
   courses: Course[] = [];
   markers: GlobalDayMarker[] = [];
   exams: CourseExam[] = [];
@@ -80,8 +83,17 @@ export class App implements OnInit {
   topics: TopicDefinition[] = [];
   unplannedTopics: TopicInstance[] = [];
   selectedCourseId = '';
-  courseDraft: SaveCourse = { name: '', description: '', weekdays: [] };
+  selectedSchoolYearId = '';
+  schoolYearDraft: SaveSchoolYear = { name: '', planningStart: '', planningEnd: '' };
+  editingSchoolYearId: string | null = null;
+  courseDraft: SaveCourse = { schoolYearId: '', name: '', description: '', weekdays: [] };
   editingCourseId: string | null = null;
+  rolloverDraft: CourseRolloverCommand = {
+    sourceCourseId: '',
+    targetSchoolYearId: '',
+    targetStartDate: '',
+    targetWeekday: IsoWeekday.Monday,
+  };
   markerDraft = { date: '', until: '', type: GlobalDayMarkerType.Holiday, label: '' };
   editingMarkerId: string | null = null;
   examDraft = { date: '', name: '' };
@@ -111,16 +123,24 @@ export class App implements OnInit {
     this.busy = true;
     forkJoin({
       config: this.api.getConfig(),
+      schoolYears: this.api.getSchoolYears(),
       courses: this.api.getCourses(),
-      markers: this.api.getMarkers(),
     }).subscribe({
-      next: ({ config, courses, markers }) => {
+      next: ({ config, schoolYears, courses }) => {
         this.config = config;
+        this.schoolYears = schoolYears;
         this.courses = courses;
-        this.markers = markers;
+        if (!this.selectedSchoolYearId || !schoolYears.some(item => item.id === this.selectedSchoolYearId)) {
+          this.selectedSchoolYearId = schoolYears[0]?.id ?? '';
+        }
         if (this.selectedCourseId && !courses.some(course => course.id === this.selectedCourseId)) {
           this.selectedCourseId = '';
         }
+        if (this.selectedCourseId) {
+          this.selectedSchoolYearId = courses.find(course => course.id === this.selectedCourseId)?.schoolYearId ?? this.selectedSchoolYearId;
+        }
+        this.courseDraft.schoolYearId ||= this.selectedSchoolYearId;
+        this.syncRolloverOptions();
         this.changeDetector.markForCheck();
         this.reloadCalendar();
       },
@@ -131,15 +151,17 @@ export class App implements OnInit {
   reloadCalendar(): void {
     this.busy = true;
     forkJoin({
-      calendar: this.api.getCalendar(this.selectedCourseId || undefined),
+      calendar: this.api.getCalendar(this.selectedCourseId || undefined, this.selectedSchoolYearId || undefined),
+      markers: this.selectedSchoolYearId ? this.api.getMarkers(this.selectedSchoolYearId) : of([]),
       exams: this.selectedCourseId ? this.api.getExams(this.selectedCourseId) : of([]),
       topics: this.selectedCourseId ? this.topicApi.getTopics(this.selectedCourseId) : of<TopicDefinition[]>([]),
       unplannedTopics: this.selectedCourseId
         ? this.topicApi.getUnplannedInstances(this.selectedCourseId)
         : of<TopicInstance[]>([]),
     }).subscribe({
-      next: ({ calendar, exams, topics, unplannedTopics }) => {
+      next: ({ calendar, markers, exams, topics, unplannedTopics }) => {
         this.calendar = calendar;
+        this.markers = markers;
         this.exams = exams;
         this.topics = topics;
         this.unplannedTopics = unplannedTopics;
@@ -152,6 +174,10 @@ export class App implements OnInit {
   }
 
   changeCourseView(): void {
+    if (this.selectedCourseId) {
+      this.selectedSchoolYearId = this.courses.find(course => course.id === this.selectedCourseId)?.schoolYearId ?? this.selectedSchoolYearId;
+      this.rolloverDraft.sourceCourseId = this.selectedCourseId;
+    }
     this.clearExam();
     this.clearTopic();
     this.reloadCalendar();
@@ -161,8 +187,6 @@ export class App implements OnInit {
     if (!this.config) return;
     this.busy = true;
     this.api.updateConfig({
-      planningStart: this.config.planningStart,
-      planningEnd: this.config.planningEnd,
       visibleWeekdays: this.config.visibleWeekdays,
       holidayColor: this.config.holidayColor,
       eventColor: this.config.eventColor,
@@ -177,17 +201,73 @@ export class App implements OnInit {
     });
   }
 
+  changeSchoolYearView(): void {
+    this.selectedCourseId = '';
+    this.courseDraft.schoolYearId = this.selectedSchoolYearId;
+    this.clearExam();
+    this.clearTopic();
+    this.clearMarker();
+    this.syncRolloverOptions();
+    this.reloadCalendar();
+  }
+
+  selectSchoolYear(schoolYear: SchoolYear | null): void {
+    if (!schoolYear) {
+      this.editingSchoolYearId = null;
+      this.schoolYearDraft = { name: '', planningStart: '', planningEnd: '' };
+      return;
+    }
+    this.editingSchoolYearId = schoolYear.id;
+    this.schoolYearDraft = {
+      name: schoolYear.name,
+      planningStart: schoolYear.planningStart,
+      planningEnd: schoolYear.planningEnd,
+    };
+  }
+
+  saveSchoolYear(): void {
+    const request = this.editingSchoolYearId
+      ? this.api.updateSchoolYear(this.editingSchoolYearId, this.schoolYearDraft)
+      : this.api.createSchoolYear(this.schoolYearDraft);
+    this.busy = true;
+    request.subscribe({
+      next: schoolYear => {
+        this.selectedSchoolYearId = schoolYear.id;
+        this.selectSchoolYear(null);
+        this.succeed(`School year “${schoolYear.name}” saved.`);
+        this.reloadAll();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  deleteSchoolYear(schoolYear: SchoolYear): void {
+    if (!window.confirm(`Delete school year “${schoolYear.name}” and all its courses and planning data?`)) return;
+    this.api.deleteSchoolYear(schoolYear.id).subscribe({
+      next: () => {
+        if (this.selectedSchoolYearId === schoolYear.id) {
+          this.selectedSchoolYearId = '';
+          this.selectedCourseId = '';
+        }
+        this.succeed('School year deleted.');
+        this.reloadAll();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
   selectCourse(course: Course | null): void {
     if (!course) {
       this.editingCourseId = null;
-      this.courseDraft = { name: '', description: '', weekdays: [] };
+      this.courseDraft = { schoolYearId: this.selectedSchoolYearId, name: '', description: '', weekdays: [] };
       return;
     }
     this.editingCourseId = course.id;
-    this.courseDraft = { name: course.name, description: course.description, weekdays: [...course.weekdays] };
+    this.courseDraft = { schoolYearId: course.schoolYearId, name: course.name, description: course.description, weekdays: [...course.weekdays] };
   }
 
   saveCourse(): void {
+    this.courseDraft.schoolYearId ||= this.selectedSchoolYearId;
     const wasEditing = this.editingCourseId !== null;
     const request = this.editingCourseId
       ? this.api.updateCourse(this.editingCourseId, this.courseDraft)
@@ -222,6 +302,48 @@ export class App implements OnInit {
     });
   }
 
+  rolloverSourceCourses(): Course[] {
+    return this.coursesForSelectedSchoolYear();
+  }
+
+  rolloverTargetSchoolYears(): SchoolYear[] {
+    return this.schoolYears.filter(schoolYear => schoolYear.id !== this.selectedSchoolYearId);
+  }
+
+  changeRolloverTargetYear(): void {
+    const target = this.schoolYears.find(item => item.id === this.rolloverDraft.targetSchoolYearId);
+    this.rolloverDraft.targetStartDate = target?.planningStart ?? '';
+  }
+
+  rollOverCourse(): void {
+    if (!this.rolloverDraft.sourceCourseId ||
+        !this.rolloverDraft.targetSchoolYearId ||
+        !this.rolloverDraft.targetStartDate) {
+      this.fail('Choose a source course, target school year, start date, and lesson day.');
+      return;
+    }
+
+    this.busy = true;
+    this.planningApi.rollOverCourse({ ...this.rolloverDraft }).subscribe({
+      next: result => {
+        this.selectedSchoolYearId = result.course.schoolYearId;
+        this.selectedCourseId = result.course.id;
+        const range = result.firstAssignedDate && result.lastAssignedDate
+          ? ` from ${result.firstAssignedDate} to ${result.lastAssignedDate}`
+          : '';
+        const skipped = result.skippedFixedDates.length > 0
+          ? `; skipped ${result.skippedFixedDates.length} fixed lesson day(s)`
+          : '';
+        this.succeed(
+          `Rolled over “${result.course.name}”: ${result.assignmentCount} scheduled and ` +
+          `${result.topicInstanceCount - result.assignmentCount} unplanned topic instance(s)${range}${skipped}.`,
+        );
+        this.reloadAll();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
   editMarker(marker: GlobalDayMarker): void {
     this.editingMarkerId = marker.id;
     this.markerDraft = { date: marker.date, until: '', type: marker.type, label: marker.label ?? '' };
@@ -234,6 +356,7 @@ export class App implements OnInit {
 
   saveMarker(): void {
     const command = {
+      schoolYearId: this.selectedSchoolYearId,
       date: this.markerDraft.date,
       type: this.markerDraft.type,
       label: this.markerDraft.label || null,
@@ -256,6 +379,7 @@ export class App implements OnInit {
     if (!this.markerDraft.date || !this.markerDraft.until) return;
     this.busy = true;
     this.api.createMarkerRange({
+      schoolYearId: this.selectedSchoolYearId,
       from: this.markerDraft.date,
       until: this.markerDraft.until,
       type: this.markerDraft.type,
@@ -371,6 +495,18 @@ export class App implements OnInit {
     return this.unplannedTopics.filter(topic =>
       topic.heading.toLocaleLowerCase().includes(search) ||
       topic.description.toLocaleLowerCase().includes(search));
+  }
+
+  coursesForSelectedSchoolYear(): Course[] {
+    return this.courses.filter(course => course.schoolYearId === this.selectedSchoolYearId);
+  }
+
+  selectedSchoolYear(): SchoolYear | null {
+    return this.schoolYears.find(item => item.id === this.selectedSchoolYearId) ?? null;
+  }
+
+  rolloverTargetSchoolYear(): SchoolYear | null {
+    return this.schoolYears.find(item => item.id === this.rolloverDraft.targetSchoolYearId) ?? null;
   }
 
   unplannedDragData(instance: TopicInstance): PlannerDragData {
@@ -508,7 +644,7 @@ export class App implements OnInit {
 
     const records = this.dataTransferKind === 'topics'
       ? this.topics.map(topic => ({ name: topic.heading, description: topic.description }))
-      : this.courses.map(course => ({ name: course.name, description: course.description }));
+      : this.coursesForSelectedSchoolYear().map(course => ({ name: course.name, description: course.description }));
     this.dataTransferText = writeNameDescriptionCsv(records);
     this.succeed(`Exported ${records.length} ${this.dataTransferKind}.`);
   }
@@ -538,7 +674,7 @@ export class App implements OnInit {
       return;
     }
 
-    const existingItems = this.dataTransferKind === 'topics' ? this.topics : this.courses;
+    const existingItems = this.dataTransferKind === 'topics' ? this.topics : this.coursesForSelectedSchoolYear();
     const ambiguousName = records
       .map(record => record.name)
       .find(name => existingItems.filter(item =>
@@ -568,17 +704,19 @@ export class App implements OnInit {
           });
         })
       : records.map(record => {
-          const existing = this.courses.find(course =>
+          const existing = this.coursesForSelectedSchoolYear().find(course =>
             this.normalizeName(course.name) === this.normalizeName(record.name));
           if (existing) {
             updatedCount += 1;
-            return this.api.updateCourse(existing.id, {
+          return this.api.updateCourse(existing.id, {
+              schoolYearId: existing.schoolYearId,
               name: record.name,
               description: record.description,
               weekdays: [...existing.weekdays],
             });
           }
           return this.api.createCourse({
+            schoolYearId: this.selectedSchoolYearId,
             name: record.name,
             description: record.description,
             weekdays: [...(this.config?.visibleWeekdays ?? [
@@ -610,6 +748,23 @@ export class App implements OnInit {
 
   private normalizeName(name: string): string {
     return name.trim().toLocaleLowerCase();
+  }
+
+  private syncRolloverOptions(): void {
+    const sourceCourses = this.rolloverSourceCourses();
+    if (this.selectedCourseId && sourceCourses.some(course => course.id === this.selectedCourseId)) {
+      this.rolloverDraft.sourceCourseId = this.selectedCourseId;
+    } else if (!sourceCourses.some(course => course.id === this.rolloverDraft.sourceCourseId)) {
+      this.rolloverDraft.sourceCourseId = sourceCourses[0]?.id ?? '';
+    }
+
+    const targets = this.rolloverTargetSchoolYears();
+    if (!targets.some(schoolYear => schoolYear.id === this.rolloverDraft.targetSchoolYearId)) {
+      this.rolloverDraft.targetSchoolYearId = targets[0]?.id ?? '';
+      this.changeRolloverTargetYear();
+    } else if (!this.rolloverDraft.targetStartDate) {
+      this.changeRolloverTargetYear();
+    }
   }
 
   private findDuplicateName(names: string[]): string | null {

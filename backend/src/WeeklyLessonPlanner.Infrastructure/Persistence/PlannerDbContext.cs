@@ -6,6 +6,7 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
 {
     public DbSet<DatabaseMetadata> DatabaseMetadata => Set<DatabaseMetadata>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
+    public DbSet<SchoolYear> SchoolYears => Set<SchoolYear>();
     public DbSet<Course> Courses => Set<Course>();
     public DbSet<CourseWeekday> CourseWeekdays => Set<CourseWeekday>();
     public DbSet<GlobalDayMarker> GlobalDayMarkers => Set<GlobalDayMarker>();
@@ -27,6 +28,7 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
         metadata.Property(item => item.Version).IsRowVersion();
 
         ConfigureAppConfig(modelBuilder);
+        ConfigureSchoolYear(modelBuilder);
         ConfigureCourse(modelBuilder);
         ConfigureMarkers(modelBuilder);
         ConfigureTopics(modelBuilder);
@@ -38,12 +40,9 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
         config.ToTable("app_config", table =>
         {
             table.HasCheckConstraint("ck_app_config_singleton", "\"Id\" = 1");
-            table.HasCheckConstraint("ck_app_config_range", "\"PlanningStart\" <= \"PlanningEnd\"");
             table.HasCheckConstraint("ck_app_config_weekdays", "\"VisibleWeekdaysMask\" BETWEEN 1 AND 127");
         });
         config.HasKey(item => item.Id);
-        config.Property(item => item.PlanningStart).HasColumnType("date");
-        config.Property(item => item.PlanningEnd).HasColumnType("date");
         config.Property(item => item.HolidayColor).HasMaxLength(20);
         config.Property(item => item.EventColor).HasMaxLength(20);
         config.Property(item => item.ExamColor).HasMaxLength(20);
@@ -51,12 +50,30 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
         config.HasData(new AppConfig
         {
             Id = AppConfig.SingletonId,
-            PlanningStart = new DateOnly(2026, 9, 1),
-            PlanningEnd = new DateOnly(2027, 6, 30),
             VisibleWeekdaysMask = 31,
             HolidayColor = "#2e7d32",
             EventColor = "#1565c0",
             ExamColor = "#ed6c02"
+        });
+    }
+
+    private static void ConfigureSchoolYear(ModelBuilder modelBuilder)
+    {
+        var schoolYear = modelBuilder.Entity<SchoolYear>();
+        schoolYear.ToTable("school_years", table =>
+            table.HasCheckConstraint("ck_school_year_range", "\"PlanningStart\" <= \"PlanningEnd\""));
+        schoolYear.HasKey(item => item.Id);
+        schoolYear.HasIndex(item => item.Name).IsUnique();
+        schoolYear.Property(item => item.Name).HasMaxLength(100);
+        schoolYear.Property(item => item.PlanningStart).HasColumnType("date");
+        schoolYear.Property(item => item.PlanningEnd).HasColumnType("date");
+        schoolYear.Property(item => item.Version).IsRowVersion();
+        schoolYear.HasData(new SchoolYear
+        {
+            Id = SchoolYear.DefaultId,
+            Name = "2026/27",
+            PlanningStart = new DateOnly(2026, 9, 1),
+            PlanningEnd = new DateOnly(2027, 6, 30)
         });
     }
 
@@ -65,10 +82,14 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
         var course = modelBuilder.Entity<Course>();
         course.ToTable("courses");
         course.HasKey(item => item.Id);
-        course.HasIndex(item => item.Name).IsUnique();
+        course.HasIndex(item => new { item.SchoolYearId, item.Name }).IsUnique();
         course.Property(item => item.Name).HasMaxLength(100);
         course.Property(item => item.Description).HasMaxLength(2000);
         course.Property(item => item.Version).IsRowVersion();
+        course.HasOne(item => item.SchoolYear)
+            .WithMany(item => item.Courses)
+            .HasForeignKey(item => item.SchoolYearId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var weekday = modelBuilder.Entity<CourseWeekday>();
         weekday.ToTable("course_weekdays", table =>
@@ -86,10 +107,14 @@ public sealed class PlannerDbContext(DbContextOptions<PlannerDbContext> options)
         marker.ToTable("global_day_markers", table =>
             table.HasCheckConstraint("ck_global_marker_type", "\"Type\" IN (1, 2)"));
         marker.HasKey(item => item.Id);
-        marker.HasIndex(item => item.Date).IsUnique();
+        marker.HasIndex(item => new { item.SchoolYearId, item.Date }).IsUnique();
         marker.Property(item => item.Date).HasColumnType("date");
         marker.Property(item => item.Label).HasMaxLength(200);
         marker.Property(item => item.Version).IsRowVersion();
+        marker.HasOne(item => item.SchoolYear)
+            .WithMany(item => item.GlobalDayMarkers)
+            .HasForeignKey(item => item.SchoolYearId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         var exam = modelBuilder.Entity<CourseExam>();
         exam.ToTable("course_exams");

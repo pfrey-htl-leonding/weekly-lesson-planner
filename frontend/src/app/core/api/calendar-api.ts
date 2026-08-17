@@ -25,8 +25,6 @@ export enum EffectiveDayState {
 }
 
 export interface AppConfig {
-  planningStart: string;
-  planningEnd: string;
   visibleWeekdays: IsoWeekday[];
   holidayColor: string;
   eventColor: string;
@@ -36,8 +34,18 @@ export interface AppConfig {
 
 export type SaveAppConfig = Omit<AppConfig, 'weekNumbering'>;
 
+export interface SchoolYear {
+  id: string;
+  name: string;
+  planningStart: string;
+  planningEnd: string;
+}
+
+export type SaveSchoolYear = Omit<SchoolYear, 'id'>;
+
 export interface Course {
   id: string;
+  schoolYearId: string;
   name: string;
   description: string;
   weekdays: IsoWeekday[];
@@ -47,6 +55,7 @@ export type SaveCourse = Omit<Course, 'id'>;
 
 export interface GlobalDayMarker {
   id: string;
+  schoolYearId: string;
   date: string;
   type: GlobalDayMarkerType;
   label: string | null;
@@ -55,6 +64,7 @@ export interface GlobalDayMarker {
 export type SaveGlobalDayMarker = Omit<GlobalDayMarker, 'id'>;
 
 export interface SaveGlobalDayMarkerRange {
+  schoolYearId: string;
   from: string;
   until: string;
   type: GlobalDayMarkerType;
@@ -98,6 +108,8 @@ export interface CalendarWeek {
 export interface CalendarView {
   planningStart: string;
   planningEnd: string;
+  schoolYearId: string;
+  schoolYearName: string;
   courseId: string | null;
   visibleWeekdays: IsoWeekday[];
   weeks: CalendarWeek[];
@@ -109,11 +121,19 @@ export class CalendarApi {
 
   getConfig(): Observable<AppConfig> { return this.api.get('/api/config'); }
   updateConfig(command: SaveAppConfig): Observable<AppConfig> { return this.api.put('/api/config', command); }
-  getCourses(): Observable<Course[]> { return this.api.get('/api/courses'); }
+  getSchoolYears(): Observable<SchoolYear[]> { return this.api.get('/api/school-years'); }
+  createSchoolYear(command: SaveSchoolYear): Observable<SchoolYear> { return this.api.post('/api/school-years', command); }
+  updateSchoolYear(id: string, command: SaveSchoolYear): Observable<SchoolYear> { return this.api.put(`/api/school-years/${id}`, command); }
+  deleteSchoolYear(id: string): Observable<void> { return this.api.delete(`/api/school-years/${id}`); }
+  getCourses(schoolYearId?: string): Observable<Course[]> {
+    return this.api.get(`/api/courses${schoolYearId ? `?schoolYearId=${schoolYearId}` : ''}`);
+  }
   createCourse(command: SaveCourse): Observable<Course> { return this.api.post('/api/courses', command); }
   updateCourse(id: string, command: SaveCourse): Observable<Course> { return this.api.put(`/api/courses/${id}`, command); }
   deleteCourse(id: string): Observable<void> { return this.api.delete(`/api/courses/${id}`); }
-  getMarkers(): Observable<GlobalDayMarker[]> { return this.api.get('/api/global-markers'); }
+  getMarkers(schoolYearId: string): Observable<GlobalDayMarker[]> {
+    return this.api.get(`/api/global-markers?schoolYearId=${schoolYearId}`);
+  }
   createMarker(command: SaveGlobalDayMarker): Observable<GlobalDayMarker> { return this.api.post('/api/global-markers', command); }
   createMarkerRange(command: SaveGlobalDayMarkerRange): Observable<GlobalDayMarker[]> {
     return this.api.post('/api/global-markers/range', command);
@@ -126,7 +146,10 @@ export class CalendarApi {
   createExam(command: SaveCourseExam): Observable<CourseExam> { return this.api.post('/api/course-exams', command); }
   updateExam(id: string, command: SaveCourseExam): Observable<CourseExam> { return this.api.put(`/api/course-exams/${id}`, command); }
   deleteExam(id: string): Observable<void> { return this.api.delete(`/api/course-exams/${id}`); }
-  getCalendar(courseId?: string): Observable<CalendarView> {
-    return this.api.get(`/api/calendar${courseId ? `?courseId=${courseId}` : ''}`);
+  getCalendar(courseId?: string, schoolYearId?: string): Observable<CalendarView> {
+    const query = new URLSearchParams();
+    if (courseId) query.set('courseId', courseId);
+    if (schoolYearId) query.set('schoolYearId', schoolYearId);
+    return this.api.get(`/api/calendar${query.size ? `?${query.toString()}` : ''}`);
   }
 }

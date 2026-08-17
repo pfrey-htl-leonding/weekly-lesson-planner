@@ -17,20 +17,22 @@ public sealed class Phase2CalendarTests
         var calendar = new CalendarService(dbContext);
         var planning = new PlanningService(dbContext);
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var date = new DateOnly(2026, 10, 12);
+        var date = await FindFreeBlockAsync(dbContext, 2);
         var otherDate = date.AddDays(1);
+        var firstWeekday = ToIsoWeekday(date);
+        var secondWeekday = ToIsoWeekday(otherDate);
         var course = await calendar.CreateCourseAsync(new(
             $"Phase 2 {suffix}",
             "Integration test",
-            [IsoWeekday.Monday, IsoWeekday.Tuesday]));
+            [firstWeekday, secondWeekday]));
 
         try
         {
             var updatedCourse = await calendar.UpdateCourseAsync(course.Id, new(
                 course.Name,
                 "Updated integration test",
-                [IsoWeekday.Tuesday]));
-            Assert.Equal([IsoWeekday.Tuesday], updatedCourse!.Weekdays);
+                [secondWeekday]));
+            Assert.Equal([secondWeekday], updatedCourse!.Weekdays);
 
             var marker = await planning.CreateGlobalMarkerAsync(new(
                 date,
@@ -54,7 +56,7 @@ public sealed class Phase2CalendarTests
             await planning.DeleteCourseExamAsync(exam.Id);
             await planning.DeleteGlobalMarkerAsync(marker.Id);
 
-            var rangeStart = new DateOnly(2026, 11, 2);
+            var rangeStart = await FindFreeBlockAsync(dbContext, 3, date.AddDays(7));
             var rangeEnd = rangeStart.AddDays(2);
             var blockingExam = await planning.CreateCourseExamAsync(new(
                 course.Id,
@@ -92,6 +94,32 @@ public sealed class Phase2CalendarTests
 
     private static CalendarDayDto FindDay(CalendarViewDto view, DateOnly date) =>
         view.Weeks.SelectMany(week => week.Days).Single(day => day.Date == date);
+
+    private static async Task<DateOnly> FindFreeBlockAsync(
+        PlannerDbContext dbContext,
+        int length,
+        DateOnly? notBefore = null)
+    {
+        var config = await dbContext.AppConfigs.AsNoTracking().SingleAsync();
+        var markers = (await dbContext.GlobalDayMarkers.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
+        var exams = (await dbContext.CourseExams.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
+        var assignments = (await dbContext.TopicAssignments.AsNoTracking().Select(item => item.Date).ToListAsync()).ToHashSet();
+        var first = notBefore is { } requested && requested > config.PlanningStart ? requested : config.PlanningStart;
+        for (var date = first; date.AddDays(length - 1) <= config.PlanningEnd; date = date.AddDays(1))
+        {
+            if (Enumerable.Range(0, length).Select(date.AddDays)
+                .All(candidate => !markers.Contains(candidate) && !exams.Contains(candidate) && !assignments.Contains(candidate)))
+            {
+                return date;
+            }
+        }
+
+        throw new InvalidOperationException("No free calendar block is available for the integration test.");
+    }
+
+    private static IsoWeekday ToIsoWeekday(DateOnly date) => date.DayOfWeek == DayOfWeek.Sunday
+        ? IsoWeekday.Sunday
+        : (IsoWeekday)date.DayOfWeek;
 
     private static PlannerDbContext CreateDbContext()
     {

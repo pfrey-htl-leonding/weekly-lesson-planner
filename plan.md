@@ -226,6 +226,8 @@ Use text/icons in addition to colour so the day states remain distinguishable fo
 
 ### Phase 4 — Planning service
 
+**Implementation status:** completed and verified on 2026-08-17.
+
 - Implement eligible-slot generation and course/day validation.
 - Implement transactional placement into an empty day.
 - Implement checked insertion with cascading forward shifts.
@@ -235,6 +237,8 @@ Use text/icons in addition to colour so the day states remain distinguishable fo
 - Integrate the Phase 3 Copy command with scheduling mutations and impact results.
 - Implement impact results, all-course shifting for global markers, single-course shifting for exams, and resolution of planning-range/course-weekday changes.
 - Test the service against a real containerized PostgreSQL instance, not an in-memory substitute for database-specific behavior.
+
+Verification: the scheduling API exposes transactional `place`, `remove`, and `drag` commands with impact results. The shared mutation engine is covered for all four drag checkbox combinations, first-gap insertion/deletion boundaries, multi-day fixed markers, and capacity failure. PostgreSQL integration tests cover persistence, all-course global-marker shifts, selected-course exam shifts, and rollback with a completely full schedule. Destructive planning-range and course-weekday changes remain explicitly rejected until their affected topics are moved or removed through these planning commands.
 
 **Exit criterion:** all planning mutations and rollback cases work through `IPlanningService` independently of the UI.
 

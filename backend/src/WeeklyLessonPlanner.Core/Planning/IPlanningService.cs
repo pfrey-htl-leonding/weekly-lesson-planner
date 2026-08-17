@@ -5,11 +5,20 @@ namespace WeeklyLessonPlanner.Core.Planning;
 
 /// <summary>
 /// Defines the application boundary for authoritative planning operations.
-/// Scheduling commands will be added in Phase 4 without leaking persistence into API endpoints.
+/// Keeps schedule mutations transactional without leaking persistence into API endpoints.
 /// </summary>
 public interface IPlanningService
 {
     Task<PlanningServiceStatus> GetStatusAsync(CancellationToken cancellationToken = default);
+    Task<PlanningImpactDto> PlaceTopicAsync(
+        PlaceTopicCommand command,
+        CancellationToken cancellationToken = default);
+    Task<PlanningImpactDto?> RemoveTopicAsync(
+        RemoveTopicCommand command,
+        CancellationToken cancellationToken = default);
+    Task<PlanningImpactDto?> DragTopicAsync(
+        DragTopicCommand command,
+        CancellationToken cancellationToken = default);
     Task<GlobalDayMarkerDto> CreateGlobalMarkerAsync(
         SaveGlobalDayMarkerCommand command,
         CancellationToken cancellationToken = default);

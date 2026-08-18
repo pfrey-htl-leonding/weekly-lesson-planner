@@ -88,6 +88,14 @@ export interface CalendarDay {
   state: EffectiveDayState;
   label: string | null;
   scheduledTopics: ScheduledTopic[];
+  scheduledExams: ScheduledExam[];
+}
+
+export interface ScheduledExam {
+  id: string;
+  courseId: string;
+  courseName: string;
+  name: string;
 }
 
 export interface ScheduledTopic {

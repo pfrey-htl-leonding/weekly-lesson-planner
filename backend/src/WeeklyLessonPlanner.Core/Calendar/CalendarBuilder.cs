@@ -11,11 +11,13 @@ public static class CalendarBuilder
         IReadOnlySet<IsoWeekday> courseWeekdays,
         IReadOnlyDictionary<DateOnly, GlobalDayMarkerDto> markers,
         IReadOnlyDictionary<DateOnly, CourseExamDto> exams,
-        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics)
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledExamDto>>? scheduledExams = null)
     {
         var firstMonday = schoolYear.PlanningStart.AddDays(-((int)schoolYear.PlanningStart.DayOfWeek + 6) % 7);
         var lastSunday = schoolYear.PlanningEnd.AddDays(7 - IsoDay(schoolYear.PlanningEnd));
         var weeks = new List<CalendarWeekDto>();
+        scheduledExams ??= new Dictionary<DateOnly, IReadOnlyList<ScheduledExamDto>>();
 
         for (var monday = firstMonday; monday <= lastSunday; monday = monday.AddDays(7))
         {
@@ -30,7 +32,8 @@ public static class CalendarBuilder
                     courseWeekdays,
                     markers,
                     exams,
-                    scheduledTopics))
+                    scheduledTopics,
+                    scheduledExams))
                 .ToArray();
 
             weeks.Add(new CalendarWeekDto(
@@ -58,7 +61,8 @@ public static class CalendarBuilder
         IReadOnlySet<IsoWeekday> courseWeekdays,
         IReadOnlyDictionary<DateOnly, GlobalDayMarkerDto> markers,
         IReadOnlyDictionary<DateOnly, CourseExamDto> exams,
-        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics)
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>> scheduledTopics,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<ScheduledExamDto>> scheduledExams)
     {
         var inRange = date >= schoolYear.PlanningStart && date <= schoolYear.PlanningEnd;
         var state = EffectiveDayState.Normal;
@@ -84,7 +88,8 @@ public static class CalendarBuilder
             inRange && courseId.HasValue && courseWeekdays.Contains(weekday),
             state,
             label,
-            inRange && scheduledTopics.TryGetValue(date, out var topics) ? topics : []);
+            inRange && scheduledTopics.TryGetValue(date, out var topics) ? topics : [],
+            inRange && scheduledExams.TryGetValue(date, out var dayExams) ? dayExams : []);
     }
 
     private static int IsoDay(DateOnly date) => date.DayOfWeek == DayOfWeek.Sunday

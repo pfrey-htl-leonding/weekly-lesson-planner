@@ -346,6 +346,15 @@
                       }
                       @else if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
                       @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
+                      @if (!selectedCourseId) {
+                        @for (exam of day.scheduledExams; track exam.id) {
+                          <article class="scheduled-topic exam-card">
+                            <small>{{ exam.courseName }}</small>
+                            <strong>Exam</strong>
+                            <span [title]="exam.name">{{ exam.name }}</span>
+                          </article>
+                        }
+                      }
                       @for (topic of day.scheduledTopics; track topic.assignmentId) {
                         <article
                           class="scheduled-topic"

@@ -226,11 +226,27 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
         var markers = (await dbContext.GlobalDayMarkers.AsNoTracking()
             .Where(item => item.SchoolYearId == schoolYear.Id)
             .ToListAsync(cancellationToken)).Select(ToDto).ToDictionary(item => item.Date);
+        var examQuery = dbContext.CourseExams.AsNoTracking()
+            .Where(item => item.Course.SchoolYearId == schoolYear.Id &&
+                item.Date >= schoolYear.PlanningStart && item.Date <= schoolYear.PlanningEnd);
+        if (courseId.HasValue) examQuery = examQuery.Where(item => item.CourseId == courseId.Value);
+        var calendarExams = await examQuery
+            .OrderBy(item => item.Course.Name)
+            .ThenBy(item => item.Name)
+            .Select(item => new
+            {
+                item.Date,
+                Exam = new CourseExamDto(item.Id, item.CourseId, item.Date, item.Name),
+                ScheduledExam = new ScheduledExamDto(item.Id, item.CourseId, item.Course.Name, item.Name)
+            })
+            .ToListAsync(cancellationToken);
         var exams = courseId.HasValue
-            ? (await dbContext.CourseExams.AsNoTracking()
-                .Where(item => item.CourseId == courseId && item.Date >= schoolYear.PlanningStart && item.Date <= schoolYear.PlanningEnd)
-                .ToListAsync(cancellationToken)).Select(ToDto).ToDictionary(item => item.Date)
+            ? calendarExams.ToDictionary(item => item.Date, item => item.Exam)
             : new Dictionary<DateOnly, CourseExamDto>();
+        var scheduledExams = calendarExams.GroupBy(item => item.Date)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<ScheduledExamDto>)group.Select(item => item.ScheduledExam).ToArray());
         var assignmentQuery = dbContext.TopicAssignments.AsNoTracking()
             .Where(item => item.Date >= schoolYear.PlanningStart && item.Date <= schoolYear.PlanningEnd &&
                 item.TopicInstance.Topic.Course.SchoolYearId == schoolYear.Id);
@@ -260,7 +276,7 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
                     .CountAsync(item => item.CourseId == course.Id && item.Assignment == null, cancellationToken));
 
         return CalendarBuilder.Build(
-            ToDto(schoolYear), config, courseId, courseWeekdays, markers, exams, scheduledTopics) with
+            ToDto(schoolYear), config, courseId, courseWeekdays, markers, exams, scheduledTopics, scheduledExams) with
         {
             PlanningSummary = planningSummary
         };

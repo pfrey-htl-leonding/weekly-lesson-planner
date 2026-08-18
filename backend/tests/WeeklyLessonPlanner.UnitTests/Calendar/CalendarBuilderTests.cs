@@ -43,6 +43,10 @@ public sealed class CalendarBuilderTests
         {
             [examDate] = new(Guid.NewGuid(), courseId, examDate, "Written exam")
         };
+        var scheduledExams = new Dictionary<DateOnly, IReadOnlyList<ScheduledExamDto>>
+        {
+            [examDate] = [new(exams[examDate].Id, courseId, "Course A", "Written exam")]
+        };
 
         var selected = CalendarBuilder.Build(
             schoolYear,
@@ -51,7 +55,8 @@ public sealed class CalendarBuilderTests
             new HashSet<IsoWeekday> { IsoWeekday.Tuesday },
             markers,
             exams,
-            new Dictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>>());
+            new Dictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>>(),
+            scheduledExams);
         var allCourses = CalendarBuilder.Build(
             schoolYear,
             Config(),
@@ -59,13 +64,15 @@ public sealed class CalendarBuilderTests
             new HashSet<IsoWeekday>(),
             markers,
             new Dictionary<DateOnly, CourseExamDto>(),
-            new Dictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>>());
+            new Dictionary<DateOnly, IReadOnlyList<ScheduledTopicDto>>(),
+            scheduledExams);
 
         Assert.Equal(EffectiveDayState.Holiday, Day(selected, holidayDate).State);
         Assert.Equal(EffectiveDayState.Exam, Day(selected, examDate).State);
         Assert.True(Day(selected, holidayDate).IsCourseDay);
         Assert.Equal(EffectiveDayState.Holiday, Day(allCourses, holidayDate).State);
         Assert.Equal(EffectiveDayState.Normal, Day(allCourses, examDate).State);
+        Assert.Equal("Course A", Assert.Single(Day(allCourses, examDate).ScheduledExams).CourseName);
     }
 
     [Fact]

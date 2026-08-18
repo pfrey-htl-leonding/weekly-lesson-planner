@@ -99,6 +99,12 @@ public sealed record ScheduledTopicDto(
     string Heading,
     string Description);
 
+public sealed record ScheduledExamDto(
+    Guid Id,
+    Guid CourseId,
+    string CourseName,
+    string Name);
+
 public sealed record CalendarDayDto(
     DateOnly Date,
     IsoWeekday Weekday,
@@ -106,7 +112,8 @@ public sealed record CalendarDayDto(
     bool IsCourseDay,
     EffectiveDayState State,
     string? Label,
-    IReadOnlyList<ScheduledTopicDto> ScheduledTopics);
+    IReadOnlyList<ScheduledTopicDto> ScheduledTopics,
+    IReadOnlyList<ScheduledExamDto> ScheduledExams);
 
 public sealed record CalendarWeekDto(
     int IsoYear,

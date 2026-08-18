@@ -104,6 +104,7 @@ const eligibleDay = {
   state: EffectiveDayState.Normal,
   label: null,
   scheduledTopics: [],
+  scheduledExams: [],
 };
 
 const scheduledTopic = {
@@ -205,6 +206,7 @@ describe('App', () => {
           state: EffectiveDayState.Normal,
           label: null,
           scheduledTopics: [],
+          scheduledExams: [],
         }],
       }],
     });
@@ -442,6 +444,43 @@ describe('App', () => {
     expect(buttons).toHaveLength(2);
     expect(buttons[0].getAttribute('aria-label')).toContain('previous lesson day');
     expect(buttons[1].getAttribute('aria-label')).toContain('next lesson day');
+  });
+
+  it('shows course-labelled exam cards in the All topics calendar', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+    component.selectedCourseId = '';
+    component.calendar = {
+      planningStart: '2026-09-07',
+      planningEnd: '2026-09-07',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
+      courseId: null,
+      visibleWeekdays: [IsoWeekday.Monday],
+      planningSummary: null,
+      weeks: [{
+        isoYear: 2026,
+        isoWeek: 37,
+        days: [{
+          ...eligibleDay,
+          isCourseDay: false,
+          scheduledExams: [{
+            id: 'exam',
+            courseId: 'course',
+            courseName: 'Algorithms',
+            name: 'Written exam',
+          }],
+        }],
+      }],
+    };
+    fixture.detectChanges();
+
+    const card = fixture.nativeElement.querySelector('.exam-card');
+    expect(card.textContent).toContain('Algorithms');
+    expect(card.textContent).toContain('Written exam');
+    expect(card.querySelectorAll('button')).toHaveLength(0);
   });
 
   it('shifts forward while preserving the source gap regardless of checkbox values', () => {

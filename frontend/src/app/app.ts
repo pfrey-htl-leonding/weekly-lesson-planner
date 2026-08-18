@@ -449,6 +449,26 @@ export class App implements OnInit {
     });
   }
 
+  moveExam(exam: CourseExam, direction: -1 | 1): void {
+    this.busy = true;
+    this.planningApi.moveExam(exam.id, direction).subscribe({
+      next: result => {
+        if (this.editingExamId === exam.id) {
+          this.examDraft.date = result.exam.date;
+        }
+        this.succeed(
+          `Moved exam “${exam.name}”${result.swappedTopic ? ' and swapped its scheduled topic' : ''}.`,
+        );
+        this.reloadCalendar();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  examOnDate(date: string): CourseExam | null {
+    return this.exams.find(exam => exam.date === date) ?? null;
+  }
+
   deleteExam(exam: CourseExam): void {
     this.api.deleteExam(exam.id).subscribe({
       next: () => { this.succeed('Exam deleted.'); this.reloadAll(); },
@@ -478,19 +498,10 @@ export class App implements OnInit {
       next: topic => {
         this.clearTopic();
         this.topicSearch = '';
-        forkJoin({
-          topics: this.topicApi.getTopics(this.selectedCourseId),
-          unplannedTopics: this.topicApi.getUnplannedInstances(this.selectedCourseId),
-        }).subscribe({
-          next: ({ topics, unplannedTopics }) => {
-            this.topics = topics;
-            this.unplannedTopics = unplannedTopics;
-            this.succeed(wasEditing
-              ? `Topic “${topic.heading}” updated.`
-              : `Topic “${topic.heading}” added to the unplanned list.`);
-          },
-          error: error => this.handleError(error),
-        });
+        this.succeed(wasEditing
+          ? `Topic “${topic.heading}” updated.`
+          : `Topic “${topic.heading}” added to the unplanned list.`);
+        this.reloadCalendar();
       },
       error: error => this.handleError(error),
     });

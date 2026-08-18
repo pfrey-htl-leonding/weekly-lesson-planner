@@ -46,6 +46,9 @@ public interface IPlanningService
         Guid id,
         SaveCourseExamCommand command,
         CancellationToken cancellationToken = default);
+    Task<MoveCourseExamResultDto> MoveCourseExamAsync(
+        MoveCourseExamCommand command,
+        CancellationToken cancellationToken = default);
     Task<bool> DeleteCourseExamAsync(Guid id, CancellationToken cancellationToken = default);
     Task<TopicInstanceDto?> CopyScheduledTopicAsync(
         Guid sourceInstanceId,

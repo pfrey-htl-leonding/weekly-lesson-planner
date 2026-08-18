@@ -29,6 +29,14 @@ public sealed record MultipleTopicPlanningResultDto(
     DateOnly? FirstAffectedDate,
     DateOnly? LastAffectedDate);
 
+public sealed record MoveCourseExamCommand(
+    Guid ExamId,
+    int Direction);
+
+public sealed record MoveCourseExamResultDto(
+    CourseExamDto Exam,
+    AssignmentMoveDto? SwappedTopic);
+
 public sealed record CourseRolloverCommand(
     Guid SourceCourseId,
     Guid TargetSchoolYearId,

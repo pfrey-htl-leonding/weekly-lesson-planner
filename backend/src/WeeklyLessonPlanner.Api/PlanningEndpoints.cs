@@ -41,6 +41,11 @@ public static class PlanningEndpoints
             IPlanningService service,
             CancellationToken token) => Results.Ok(await service.RemoveAllTopicsAsync(command, token)));
 
+        planning.MapPost("/move-exam", async (
+            MoveCourseExamCommand command,
+            IPlanningService service,
+            CancellationToken token) => Results.Ok(await service.MoveCourseExamAsync(command, token)));
+
         planning.MapPost("/course-rollover", async (
             CourseRolloverCommand command,
             IPlanningService service,

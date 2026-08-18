@@ -115,7 +115,14 @@
               <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId"></mat-form-field>
               <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
               <div class="resource-list">
-                @for (exam of exams; track exam.id) { <div><button mat-button (click)="editExam(exam)">{{ exam.date }} · {{ exam.name }}</button><button mat-icon-button aria-label="Delete exam" (click)="deleteExam(exam)"><mat-icon>delete</mat-icon></button></div> }
+                @for (exam of exams; track exam.id) {
+                  <div>
+                    <button mat-button (click)="editExam(exam)">{{ exam.date }} · {{ exam.name }}</button>
+                    <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move exam ' + exam.name + ' to the previous lesson day'" (click)="moveExam(exam, -1)" [disabled]="busy"><mat-icon>arrow_back</mat-icon></button>
+                    <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move exam ' + exam.name + ' to the next lesson day'" (click)="moveExam(exam, 1)" [disabled]="busy"><mat-icon>arrow_forward</mat-icon></button>
+                    <button mat-icon-button aria-label="Delete exam" (click)="deleteExam(exam)" [disabled]="busy"><mat-icon>delete</mat-icon></button>
+                  </div>
+                }
               </div>
             </div>
           </mat-tab>
@@ -327,7 +334,17 @@
                       [class.eligible-drop-target]="canDropOnDay(day)"
                       [ngStyle]="dayStyle(day)">
                       <span class="date">{{ calendarDateLabel(day.date) }}</span>
-                      @if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
+                      @if (day.state === states.Exam && examOnDate(day.date); as exam) {
+                        <article class="scheduled-topic exam-card">
+                          <strong>Exam</strong>
+                          <span [title]="exam.name">{{ exam.name }}</span>
+                          <div class="scheduled-actions">
+                            <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move exam ' + exam.name + ' to the previous lesson day'" (click)="moveExam(exam, -1)" [disabled]="busy"><mat-icon>arrow_back</mat-icon></button>
+                            <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move exam ' + exam.name + ' to the next lesson day'" (click)="moveExam(exam, 1)" [disabled]="busy"><mat-icon>arrow_forward</mat-icon></button>
+                          </div>
+                        </article>
+                      }
+                      @else if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
                       @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
                       @for (topic of day.scheduledTopics; track topic.assignmentId) {
                         <article

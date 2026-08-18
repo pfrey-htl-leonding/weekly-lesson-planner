@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from './api-client';
-import { Course, IsoWeekday } from './calendar-api';
+import { Course, CourseExam, IsoWeekday } from './calendar-api';
 import { TopicInstance } from './topic-api';
 
 export interface PlaceTopicCommand {
@@ -33,6 +33,11 @@ export interface MultipleTopicPlanningResult {
   affectedTopicCount: number;
   firstAffectedDate: string | null;
   lastAffectedDate: string | null;
+}
+
+export interface MoveCourseExamResult {
+  exam: CourseExam;
+  swappedTopic: AssignmentMove | null;
 }
 
 export interface CourseRolloverCommand {
@@ -98,6 +103,10 @@ export class PlanningApi {
 
   removeAll(command: MultipleTopicPlanningCommand): Observable<MultipleTopicPlanningResult> {
     return this.api.post('/api/planning/remove-all', command);
+  }
+
+  moveExam(examId: string, direction: -1 | 1): Observable<MoveCourseExamResult> {
+    return this.api.post('/api/planning/move-exam', { examId, direction });
   }
 
   rollOverCourse(command: CourseRolloverCommand): Observable<CourseRolloverResult> {

@@ -499,6 +499,90 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         return CalendarService.ToDto(exam);
     }
 
+    public async Task<MoveCourseExamResultDto> MoveCourseExamAsync(
+        MoveCourseExamCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (command.Direction is not (-1 or 1))
+        {
+            throw new ArgumentException("Exam movement direction must be -1 or 1.");
+        }
+
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var exam = await dbContext.CourseExams
+            .Include(item => item.Course)
+            .ThenInclude(item => item.SchoolYear)
+            .SingleOrDefaultAsync(item => item.Id == command.ExamId, cancellationToken)
+            ?? throw new KeyNotFoundException("Course exam not found.");
+        var weekdays = (await dbContext.CourseWeekdays
+                .Where(item => item.CourseId == exam.CourseId)
+                .Select(item => item.Weekday)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        if (!weekdays.Contains(ToIsoWeekday(exam.Date)))
+        {
+            throw new PlanningConflictException(
+                "This exam is not on a teaching weekday and cannot be moved with the lesson-day arrows.");
+        }
+
+        var blockedDates = (await dbContext.GlobalDayMarkers.AsNoTracking()
+                .Where(item => item.SchoolYearId == exam.Course.SchoolYearId)
+                .Select(item => item.Date)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+        blockedDates.UnionWith(await dbContext.CourseExams.AsNoTracking()
+            .Where(item => item.CourseId == exam.CourseId && item.Id != exam.Id)
+            .Select(item => item.Date)
+            .ToListAsync(cancellationToken));
+        var lessonDates = Enumerable
+            .Range(
+                0,
+                exam.Course.SchoolYear.PlanningEnd.DayNumber -
+                    exam.Course.SchoolYear.PlanningStart.DayNumber + 1)
+            .Select(exam.Course.SchoolYear.PlanningStart.AddDays)
+            .Where(date => weekdays.Contains(ToIsoWeekday(date)) && !blockedDates.Contains(date))
+            .ToArray();
+        var sourceIndex = Array.IndexOf(lessonDates, exam.Date);
+        var targetIndex = sourceIndex + command.Direction;
+        if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= lessonDates.Length)
+        {
+            throw new PlanningConflictException(
+                $"There is no {(command.Direction < 0 ? "earlier" : "later")} lesson day available for this exam.");
+        }
+
+        var sourceDate = exam.Date;
+        var targetDate = lessonDates[targetIndex];
+        if (await dbContext.TopicAssignments.AnyAsync(
+                item => item.CourseId == exam.CourseId && item.Date == sourceDate,
+                cancellationToken))
+        {
+            throw new PlanningConflictException("The exam date unexpectedly contains a scheduled topic.");
+        }
+        var swappedAssignment = await dbContext.TopicAssignments
+            .SingleOrDefaultAsync(
+                item => item.CourseId == exam.CourseId && item.Date == targetDate,
+                cancellationToken);
+
+        exam.Date = targetDate;
+        if (swappedAssignment is not null)
+        {
+            swappedAssignment.Date = sourceDate;
+        }
+        await SaveConflictSafeAsync(
+            "The exam could not be moved because the course schedule changed concurrently.",
+            cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return new MoveCourseExamResultDto(
+            CalendarService.ToDto(exam),
+            swappedAssignment is null
+                ? null
+                : new AssignmentMoveDto(
+                    swappedAssignment.Id,
+                    swappedAssignment.TopicInstanceId,
+                    targetDate,
+                    sourceDate));
+    }
+
     public async Task<bool> DeleteCourseExamAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var exam = await dbContext.CourseExams.SingleOrDefaultAsync(item => item.Id == id, cancellationToken);

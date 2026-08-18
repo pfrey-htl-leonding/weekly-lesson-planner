@@ -65,6 +65,20 @@ const planningApi = {
     firstAffectedDate: '2026-09-07',
     lastAffectedDate: '2026-09-21',
   })),
+  moveExam: vi.fn(() => of({
+    exam: {
+      id: 'exam',
+      courseId: 'course',
+      date: '2026-09-14',
+      name: 'Written exam',
+    },
+    swappedTopic: {
+      assignmentId: 'assignment',
+      topicInstanceId: 'instance',
+      from: '2026-09-14',
+      to: '2026-09-07',
+    },
+  })),
   rollOverCourse: vi.fn(() => of({
     course: {
       id: 'rolled-over-course',
@@ -220,6 +234,24 @@ describe('App', () => {
     expect(topicApi.createTopic).not.toHaveBeenCalled();
   });
 
+  it('reloads the calendar after editing a shared topic definition', () => {
+    const getCalendar = vi.spyOn(calendarApi, 'getCalendar');
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.editingTopicId = 'topic';
+    component.topicDraft = { heading: 'Updated heading', description: 'Updated description' };
+
+    component.saveTopic();
+
+    expect(topicApi.updateTopic).toHaveBeenCalledWith('topic', {
+      courseId: 'course',
+      heading: 'Updated heading',
+      description: 'Updated description',
+    });
+    expect(getCalendar).toHaveBeenCalledWith('course', undefined);
+  });
+
   it('does not call the planning API while a topic is merely dragged over a valid day', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
@@ -329,6 +361,67 @@ describe('App', () => {
     component.multiplePlanningUntil = command.until;
     component.removeAllTopics();
     expect(planningApi.removeAll).toHaveBeenCalledWith(command);
+  });
+
+  it('moves an exam by one lesson day and updates its active edit date', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const exam = {
+      id: 'exam',
+      courseId: 'course',
+      date: '2026-09-07',
+      name: 'Written exam',
+    };
+    component.selectedCourseId = 'course';
+    component.editExam(exam);
+
+    component.moveExam(exam, 1);
+
+    expect(planningApi.moveExam).toHaveBeenCalledWith('exam', 1);
+    expect(component.examDraft.date).toBe('2026-09-14');
+    expect(component.message).toContain('swapped its scheduled topic');
+  });
+
+  it('renders both exam movement arrows on the calendar exam card', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.exams = [{
+      id: 'exam',
+      courseId: 'course',
+      date: '2026-09-07',
+      name: 'Written exam',
+    }];
+    component.calendar = {
+      planningStart: '2026-09-07',
+      planningEnd: '2026-09-07',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
+      courseId: 'course',
+      visibleWeekdays: [IsoWeekday.Monday],
+      planningSummary: {
+        lessonDayCount: 0,
+        plannedTopicCount: 0,
+        unplannedTopicCount: 0,
+      },
+      weeks: [{
+        isoYear: 2026,
+        isoWeek: 37,
+        days: [{
+          ...eligibleDay,
+          state: EffectiveDayState.Exam,
+          label: 'Written exam',
+        }],
+      }],
+    };
+    fixture.detectChanges();
+
+    const buttons = fixture.nativeElement.querySelectorAll('.exam-card button');
+    expect(buttons).toHaveLength(2);
+    expect(buttons[0].getAttribute('aria-label')).toContain('previous lesson day');
+    expect(buttons[1].getAttribute('aria-label')).toContain('next lesson day');
   });
 
   it('shifts forward while preserving the source gap regardless of checkbox values', () => {

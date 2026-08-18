@@ -246,7 +246,41 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
         var scheduledTopics = assignments.GroupBy(item => item.Date)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<ScheduledTopicDto>)group.Select(item => item.Topic).ToArray());
 
-        return CalendarBuilder.Build(ToDto(schoolYear), config, courseId, courseWeekdays, markers, exams, scheduledTopics);
+        var planningSummary = course is null
+            ? null
+            : new CoursePlanningSummaryDto(
+                CountLessonDays(
+                    schoolYear.PlanningStart,
+                    schoolYear.PlanningEnd,
+                    courseWeekdays,
+                    markers.Keys,
+                    exams.Keys),
+                assignments.Count,
+                await dbContext.TopicInstances.AsNoTracking()
+                    .CountAsync(item => item.CourseId == course.Id && item.Assignment == null, cancellationToken));
+
+        return CalendarBuilder.Build(
+            ToDto(schoolYear), config, courseId, courseWeekdays, markers, exams, scheduledTopics) with
+        {
+            PlanningSummary = planningSummary
+        };
+    }
+
+    private static int CountLessonDays(
+        DateOnly planningStart,
+        DateOnly planningEnd,
+        IReadOnlySet<IsoWeekday> courseWeekdays,
+        IEnumerable<DateOnly> markerDates,
+        IEnumerable<DateOnly> examDates)
+    {
+        var fixedDates = markerDates.Concat(examDates).ToHashSet();
+        var count = 0;
+        for (var date = planningStart; date <= planningEnd; date = date.AddDays(1))
+        {
+            if (courseWeekdays.Contains(ToIsoWeekday(date)) && !fixedDates.Contains(date)) count++;
+        }
+
+        return count;
     }
 
     private async Task<AppConfig> GetConfigEntityAsync(CancellationToken cancellationToken) =>

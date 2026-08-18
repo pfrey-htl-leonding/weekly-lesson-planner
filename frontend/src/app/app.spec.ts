@@ -21,6 +21,7 @@ const calendarApi = {
     schoolYearId: 'school-year', schoolYearName: '2026/27',
     visibleWeekdays: [IsoWeekday.Monday, IsoWeekday.Tuesday, IsoWeekday.Wednesday, IsoWeekday.Thursday, IsoWeekday.Friday],
     weeks: [],
+    planningSummary: null,
   }),
 };
 
@@ -114,6 +115,28 @@ describe('App', () => {
     expect(fixture.nativeElement.textContent).toContain('Weekly Lesson Planner');
   });
 
+  it('shows the selected course planning summary above the unplanned topics', async () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.componentInstance.calendar = {
+      ...fixture.componentInstance.calendar!,
+      courseId: 'course',
+      planningSummary: {
+        lessonDayCount: 27,
+        plannedTopicCount: 10,
+        unplannedTopicCount: 17,
+      },
+    };
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const summary = fixture.nativeElement.querySelector('.topic-planning-summary');
+    expect(summary.textContent).toContain('Lesson days:27');
+    expect(summary.textContent).toContain('Planned:10');
+    expect(summary.textContent).toContain('Unplanned:17');
+  });
+
   it('filters unplanned topic instances by heading or description', () => {
     const fixture = TestBed.createComponent(App);
     fixture.componentInstance.unplannedTopics = [
@@ -145,6 +168,7 @@ describe('App', () => {
       schoolYearName: '2026/27',
       courseId: null,
       visibleWeekdays: [IsoWeekday.Monday],
+      planningSummary: null,
       weeks: [{
         isoYear: 2026,
         isoWeek: 32,
@@ -288,6 +312,11 @@ describe('App', () => {
       schoolYearName: '2026/27',
       courseId: 'course',
       visibleWeekdays: [IsoWeekday.Monday],
+      planningSummary: {
+        lessonDayCount: 3,
+        plannedTopicCount: 0,
+        unplannedTopicCount: 0,
+      },
       weeks: [
         { isoYear: 2026, isoWeek: 37, days: [{ ...eligibleDay, date: '2026-09-07' }] },
         { isoYear: 2026, isoWeek: 38, days: [{ ...eligibleDay, date: '2026-09-14' }] },

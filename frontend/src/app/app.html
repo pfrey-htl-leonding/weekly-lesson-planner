@@ -19,6 +19,13 @@
                 <p>Select a course in the Course view to manage its topics.</p>
               }
 
+              @if (calendar?.planningSummary; as summary) {
+                <div class="topic-planning-summary" aria-label="Course topic planning summary">
+                  <div><span>Lesson days:</span> <strong>{{ summary.lessonDayCount }}</strong></div>
+                  <div><span>Planned:</span> <strong>{{ summary.plannedTopicCount }}</strong></div>
+                  <div><span>Unplanned:</span> <strong>{{ summary.unplannedTopicCount }}</strong></div>
+                </div>
+              }
               <h3>Unplanned topic instances</h3>
               <mat-form-field>
                 <mat-label>Search topic list</mat-label>

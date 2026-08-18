@@ -112,6 +112,11 @@ public sealed record CalendarWeekDto(
     int IsoWeek,
     IReadOnlyList<CalendarDayDto> Days);
 
+public sealed record CoursePlanningSummaryDto(
+    int LessonDayCount,
+    int PlannedTopicCount,
+    int UnplannedTopicCount);
+
 public sealed record CalendarViewDto(
     DateOnly PlanningStart,
     DateOnly PlanningEnd,
@@ -119,4 +124,5 @@ public sealed record CalendarViewDto(
     string SchoolYearName,
     Guid? CourseId,
     IReadOnlyList<IsoWeekday> VisibleWeekdays,
-    IReadOnlyList<CalendarWeekDto> Weeks);
+    IReadOnlyList<CalendarWeekDto> Weeks,
+    CoursePlanningSummaryDto? PlanningSummary = null);

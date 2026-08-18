@@ -105,6 +105,12 @@ export interface CalendarWeek {
   days: CalendarDay[];
 }
 
+export interface CoursePlanningSummary {
+  lessonDayCount: number;
+  plannedTopicCount: number;
+  unplannedTopicCount: number;
+}
+
 export interface CalendarView {
   planningStart: string;
   planningEnd: string;
@@ -113,6 +119,7 @@ export interface CalendarView {
   courseId: string | null;
   visibleWeekdays: IsoWeekday[];
   weeks: CalendarWeek[];
+  planningSummary: CoursePlanningSummary | null;
 }
 
 @Injectable({ providedIn: 'root' })

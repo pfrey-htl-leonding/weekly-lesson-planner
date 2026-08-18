@@ -78,8 +78,8 @@ public sealed class CalendarBuilderTests
         {
             [date] =
             [
-                new(Guid.NewGuid(), Guid.NewGuid(), firstCourse, "Course A", "Arrays", ""),
-                new(Guid.NewGuid(), Guid.NewGuid(), secondCourse, "Course B", "Databases", "")
+                new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), firstCourse, "Course A", "Arrays", ""),
+                new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), secondCourse, "Course B", "Databases", "")
             ]
         };
 

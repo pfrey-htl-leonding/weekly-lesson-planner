@@ -93,6 +93,7 @@ public sealed record SaveCourseExamCommand(Guid CourseId, DateOnly Date, string 
 public sealed record ScheduledTopicDto(
     Guid AssignmentId,
     Guid TopicInstanceId,
+    Guid TopicId,
     Guid CourseId,
     string CourseName,
     string Heading,

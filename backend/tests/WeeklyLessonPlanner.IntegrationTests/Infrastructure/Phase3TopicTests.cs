@@ -49,6 +49,7 @@ public sealed class Phase3TopicTests
             var selectedView = await calendar.GetCalendarAsync(course.Id, null);
             Assert.Equal("Binary search", FindDay(aggregateView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().Heading);
             Assert.Equal(course.Name, FindDay(selectedView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().CourseName);
+            Assert.Equal(topic.Id, FindDay(selectedView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().TopicId);
             await Assert.ThrowsAsync<PlanningConflictException>(() =>
                 topics.DeleteUnplannedInstanceAsync(source.Id));
 

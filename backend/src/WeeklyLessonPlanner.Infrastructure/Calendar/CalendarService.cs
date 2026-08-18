@@ -240,7 +240,7 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
             .Select(item => new
             {
                 item.Date,
-                Topic = new ScheduledTopicDto(item.Id, item.TopicInstanceId, item.CourseId,
+                Topic = new ScheduledTopicDto(item.Id, item.TopicInstanceId, item.TopicInstance.TopicId, item.CourseId,
                     item.TopicInstance.Topic.Course.Name, item.TopicInstance.Topic.Heading, item.TopicInstance.Topic.Description)
             }).ToListAsync(cancellationToken);
         var scheduledTopics = assignments.GroupBy(item => item.Date)

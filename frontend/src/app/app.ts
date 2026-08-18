@@ -87,6 +87,7 @@ export class App implements OnInit {
   calendar: CalendarView | null = null;
   topics: TopicDefinition[] = [];
   unplannedTopics: TopicInstance[] = [];
+  managementTabIndex = 0;
   selectedCourseId = '';
   selectedSchoolYearId = '';
   schoolYearDraft: SaveSchoolYear = { name: '', planningStart: '', planningEnd: '' };
@@ -476,9 +477,11 @@ export class App implements OnInit {
     });
   }
 
-  editTopic(topic: TopicDefinition | TopicInstance): void {
+  editTopic(topic: TopicDefinition | TopicInstance | ScheduledTopic): void {
     this.editingTopicId = 'topicId' in topic ? topic.topicId : topic.id;
     this.topicDraft = { heading: topic.heading, description: topic.description };
+    this.managementTabIndex = 0;
+    this.changeDetector.markForCheck();
   }
 
   clearTopic(): void {

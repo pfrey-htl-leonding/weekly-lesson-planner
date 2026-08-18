@@ -12,7 +12,7 @@
   <section class="workspace" cdkDropListGroup>
     <aside class="controls">
       <mat-card appearance="outlined" class="management-card">
-        <mat-tab-group dynamicHeight animationDuration="150ms">
+        <mat-tab-group dynamicHeight animationDuration="150ms" [(selectedIndex)]="managementTabIndex">
           <mat-tab label="Topic management">
             <div class="tab-content form-grid">
               @if (!selectedCourseId) {
@@ -364,6 +364,7 @@
                             <div class="scheduled-actions">
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move ' + topic.heading + ' to the previous eligible day'" (click)="moveScheduled(topic, day.date, -1)" [disabled]="busy || !canMoveScheduled(day.date, -1)"><mat-icon>arrow_back</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Shift ' + topic.heading + ' forward one eligible day and leave its current day empty'" title="Shift forward; leave current day empty" (click)="moveScheduled(topic, day.date, 1)" [disabled]="busy || !canMoveScheduled(day.date, 1)"><mat-icon>arrow_forward</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Edit topic ' + topic.heading" (click)="editTopic(topic)" [disabled]="busy"><mat-icon>edit</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Copy ' + topic.heading + ' to the unplanned list'" (click)="copyScheduledTopic(topic)" [disabled]="busy"><mat-icon>content_copy</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Remove ' + topic.heading + ' from the schedule'" (click)="removeScheduledTopic(topic)" [disabled]="busy"><mat-icon>event_busy</mat-icon></button>
                             </div>

@@ -93,6 +93,7 @@ export interface CalendarDay {
 export interface ScheduledTopic {
   assignmentId: string;
   topicInstanceId: string;
+  topicId: string;
   courseId: string;
   courseName: string;
   heading: string;

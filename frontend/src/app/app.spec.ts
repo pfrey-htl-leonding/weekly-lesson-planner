@@ -109,6 +109,7 @@ const eligibleDay = {
 const scheduledTopic = {
   assignmentId: 'assignment',
   topicInstanceId: 'instance',
+  topicId: 'topic',
   courseId: 'course',
   courseName: 'Course',
   heading: 'Trees',
@@ -250,6 +251,25 @@ describe('App', () => {
       description: 'Updated description',
     });
     expect(getCalendar).toHaveBeenCalledWith('course', undefined);
+  });
+
+  it('opens a scheduled topic in the Topic Management edit form', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.managementTabIndex = 4;
+
+    component.editTopic({
+      ...scheduledTopic,
+      heading: 'Trees',
+      description: 'Balanced search trees',
+    });
+
+    expect(component.managementTabIndex).toBe(0);
+    expect(component.editingTopicId).toBe('topic');
+    expect(component.topicDraft).toEqual({
+      heading: 'Trees',
+      description: 'Balanced search trees',
+    });
   });
 
   it('does not call the planning API while a topic is merely dragged over a valid day', () => {

@@ -31,6 +31,16 @@ public static class PlanningEndpoints
             return impact is null ? Results.NotFound() : Results.Ok(impact);
         });
 
+        planning.MapPost("/add-all", async (
+            MultipleTopicPlanningCommand command,
+            IPlanningService service,
+            CancellationToken token) => Results.Ok(await service.AddAllTopicsAsync(command, token)));
+
+        planning.MapPost("/remove-all", async (
+            MultipleTopicPlanningCommand command,
+            IPlanningService service,
+            CancellationToken token) => Results.Ok(await service.RemoveAllTopicsAsync(command, token)));
+
         planning.MapPost("/course-rollover", async (
             CourseRolloverCommand command,
             IPlanningService service,

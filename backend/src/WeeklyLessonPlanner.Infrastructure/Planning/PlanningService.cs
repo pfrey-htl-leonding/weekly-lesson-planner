@@ -143,6 +143,75 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         return noOp;
     }
 
+    public async Task<MultipleTopicPlanningResultDto> AddAllTopicsAsync(
+        MultipleTopicPlanningCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var (from, until) = await ResolvePlanningIntervalAsync(command, cancellationToken);
+        var schedule = await LoadScheduleAsync(
+            command.CourseId,
+            new HashSet<DateOnly>(),
+            cancellationToken: cancellationToken);
+        var freeDates = schedule.EligibleSlots
+            .Where(date => date >= from && date <= until && !schedule.State.ContainsKey(date))
+            .ToArray();
+        var instances = await dbContext.TopicInstances
+            .Include(item => item.Topic)
+            .Include(item => item.Assignment)
+            .Where(item => item.CourseId == command.CourseId && item.Assignment == null)
+            .OrderBy(item => item.Topic.Heading.ToLower())
+            .ThenBy(item => item.Topic.Heading)
+            .ThenBy(item => item.Id)
+            .Take(freeDates.Length)
+            .ToListAsync(cancellationToken);
+
+        for (var index = 0; index < instances.Count; index++)
+        {
+            var assignment = new TopicAssignment
+            {
+                Id = Guid.NewGuid(),
+                TopicInstanceId = instances[index].Id,
+                CourseId = command.CourseId,
+                TopicInstance = instances[index]
+            };
+            schedule.Assignments.Add(assignment.Id, assignment);
+            schedule.State.Add(freeDates[index], assignment.Id);
+        }
+
+        await PersistScheduleAsync(schedule, null, null, [], cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return new MultipleTopicPlanningResultDto(
+            instances.Count,
+            instances.Count > 0 ? freeDates[0] : null,
+            instances.Count > 0 ? freeDates[instances.Count - 1] : null);
+    }
+
+    public async Task<MultipleTopicPlanningResultDto> RemoveAllTopicsAsync(
+        MultipleTopicPlanningCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var (from, until) = await ResolvePlanningIntervalAsync(command, cancellationToken);
+        var assignments = await dbContext.TopicAssignments
+            .Where(item => item.CourseId == command.CourseId && item.Date >= from && item.Date <= until)
+            .OrderBy(item => item.Date)
+            .ToListAsync(cancellationToken);
+
+        dbContext.TopicAssignments.RemoveRange(assignments);
+        if (assignments.Count > 0)
+        {
+            await SaveConflictSafeAsync(
+                "The course schedule changed concurrently. Refresh it and try again.",
+                cancellationToken);
+        }
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return new MultipleTopicPlanningResultDto(
+            assignments.Count,
+            assignments.Count > 0 ? assignments[0].Date : null,
+            assignments.Count > 0 ? assignments[^1].Date : null);
+    }
+
     public async Task<CourseRolloverResultDto> RollOverCourseAsync(
         CourseRolloverCommand command,
         CancellationToken cancellationToken = default)
@@ -580,6 +649,26 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             assignments.ToDictionary(item => item.Date, item => item.Id),
             assignments.ToDictionary(item => item.Id),
             assignments.ToDictionary(item => item.Id, item => item.Date));
+    }
+
+    private async Task<(DateOnly From, DateOnly Until)> ResolvePlanningIntervalAsync(
+        MultipleTopicPlanningCommand command,
+        CancellationToken cancellationToken)
+    {
+        var course = await dbContext.Courses.AsNoTracking()
+            .Include(item => item.SchoolYear)
+            .SingleOrDefaultAsync(item => item.Id == command.CourseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Course not found.");
+        var from = command.From ?? course.SchoolYear.PlanningStart;
+        var until = command.Until ?? course.SchoolYear.PlanningEnd;
+        EnsureDateInRange(from, course.SchoolYear);
+        EnsureDateInRange(until, course.SchoolYear);
+        if (until < from)
+        {
+            throw new ArgumentException("Until must be on or after From.");
+        }
+
+        return (from, until);
     }
 
     private async Task<PlanningImpactDto> PersistScheduleAsync(

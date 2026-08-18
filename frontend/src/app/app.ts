@@ -32,7 +32,12 @@ import {
   ScheduledTopic,
 } from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
-import { CourseRolloverCommand, PlanningApi, PlanningImpact } from './core/api/planning-api';
+import {
+  CourseRolloverCommand,
+  MultipleTopicPlanningResult,
+  PlanningApi,
+  PlanningImpact,
+} from './core/api/planning-api';
 import {
   parseNameDescriptionCsv,
   writeNameDescriptionCsv,
@@ -102,6 +107,8 @@ export class App implements OnInit {
   editingTopicId: string | null = null;
   topicSearch = '';
   placementDate = '';
+  multiplePlanningFrom = '';
+  multiplePlanningUntil = '';
   insertShiftsSchedule = false;
   deleteShiftsSchedule = false;
   dataTransferText = '';
@@ -165,6 +172,21 @@ export class App implements OnInit {
         this.exams = exams;
         this.topics = topics;
         this.unplannedTopics = unplannedTopics;
+        if (this.selectedCourseId) {
+          if (!this.multiplePlanningFrom ||
+              this.multiplePlanningFrom < calendar.planningStart ||
+              this.multiplePlanningFrom > calendar.planningEnd) {
+            this.multiplePlanningFrom = calendar.planningStart;
+          }
+          if (this.multiplePlanningUntil &&
+              (this.multiplePlanningUntil < calendar.planningStart ||
+               this.multiplePlanningUntil > calendar.planningEnd)) {
+            this.multiplePlanningUntil = '';
+          }
+        } else {
+          this.multiplePlanningFrom = '';
+          this.multiplePlanningUntil = '';
+        }
         this.busy = false;
         this.error = '';
         this.changeDetector.markForCheck();
@@ -576,6 +598,44 @@ export class App implements OnInit {
       assignmentId: topic.assignmentId,
       deleteShiftsSchedule: this.deleteShiftsSchedule,
     }), `Removed “${topic.heading}”`);
+  }
+
+  addAllTopics(): void {
+    if (!this.selectedCourseId) return;
+    this.runMultipleTopicPlanningCommand(
+      this.planningApi.addAll({
+        courseId: this.selectedCourseId,
+        from: this.multiplePlanningFrom || null,
+        until: this.multiplePlanningUntil || null,
+      }),
+      'added to the schedule',
+    );
+  }
+
+  removeAllTopics(): void {
+    if (!this.selectedCourseId) return;
+    this.runMultipleTopicPlanningCommand(
+      this.planningApi.removeAll({
+        courseId: this.selectedCourseId,
+        from: this.multiplePlanningFrom || null,
+        until: this.multiplePlanningUntil || null,
+      }),
+      'removed from the schedule',
+    );
+  }
+
+  private runMultipleTopicPlanningCommand(
+    request: Observable<MultipleTopicPlanningResult>,
+    action: string,
+  ): void {
+    this.busy = true;
+    request.subscribe({
+      next: result => {
+        this.succeed(`${result.affectedTopicCount} ${result.affectedTopicCount === 1 ? 'topic' : 'topics'} ${action}.`);
+        this.reloadCalendar();
+      },
+      error: error => this.handleError(error),
+    });
   }
 
   copyScheduledTopic(topic: ScheduledTopic): void {

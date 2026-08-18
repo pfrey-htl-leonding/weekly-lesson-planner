@@ -23,6 +23,18 @@ export interface DragTopicCommand {
   insertShiftsSchedule: boolean;
 }
 
+export interface MultipleTopicPlanningCommand {
+  courseId: string;
+  from: string | null;
+  until: string | null;
+}
+
+export interface MultipleTopicPlanningResult {
+  affectedTopicCount: number;
+  firstAffectedDate: string | null;
+  lastAffectedDate: string | null;
+}
+
 export interface CourseRolloverCommand {
   sourceCourseId: string;
   targetSchoolYearId: string;
@@ -78,6 +90,14 @@ export class PlanningApi {
 
   drag(command: DragTopicCommand): Observable<PlanningImpact> {
     return this.api.post('/api/planning/drag', command);
+  }
+
+  addAll(command: MultipleTopicPlanningCommand): Observable<MultipleTopicPlanningResult> {
+    return this.api.post('/api/planning/add-all', command);
+  }
+
+  removeAll(command: MultipleTopicPlanningCommand): Observable<MultipleTopicPlanningResult> {
+    return this.api.post('/api/planning/remove-all', command);
   }
 
   rollOverCourse(command: CourseRolloverCommand): Observable<CourseRolloverResult> {

@@ -55,6 +55,16 @@ const planningApi = {
   place: vi.fn(() => of(emptyImpact)),
   remove: vi.fn(() => of(emptyImpact)),
   drag: vi.fn(() => of(emptyImpact)),
+  addAll: vi.fn(() => of({
+    affectedTopicCount: 2,
+    firstAffectedDate: '2026-09-07',
+    lastAffectedDate: '2026-09-14',
+  })),
+  removeAll: vi.fn(() => of({
+    affectedTopicCount: 3,
+    firstAffectedDate: '2026-09-07',
+    lastAffectedDate: '2026-09-21',
+  })),
   rollOverCourse: vi.fn(() => of({
     course: {
       id: 'rolled-over-course',
@@ -297,6 +307,28 @@ describe('App', () => {
       assignmentId: 'assignment',
       deleteShiftsSchedule: true,
     });
+  });
+
+  it('sends bounded add-all and remove-all commands for the selected course', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.multiplePlanningFrom = '2026-09-07';
+    component.multiplePlanningUntil = '2026-10-05';
+
+    component.addAllTopics();
+
+    const command = {
+      courseId: 'course',
+      from: '2026-09-07',
+      until: '2026-10-05',
+    };
+    expect(planningApi.addAll).toHaveBeenCalledWith(command);
+
+    component.multiplePlanningFrom = command.from;
+    component.multiplePlanningUntil = command.until;
+    component.removeAllTopics();
+    expect(planningApi.removeAll).toHaveBeenCalledWith(command);
   });
 
   it('shifts forward while preserving the source gap regardless of checkbox values', () => {

@@ -40,6 +40,9 @@ mat-card-content { padding-top: 1rem; }
 .topic-instance strong { display: block; font-size: .82rem; line-height: 1.1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-instance p { color: var(--mat-sys-on-surface-variant); font-size: .7rem; line-height: .9rem; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .topic-actions { align-items: center; display: flex; }
+.multiple-topic-planning { align-items: start; display: grid; gap: .5rem; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); }
+.multiple-topic-planning .button-row { padding-top: .45rem; }
+.multiple-topic-planning mat-form-field { min-width: 0; }
 .drag-handle { align-items: center; background: var(--mat-sys-surface-container-highest); border-radius: .35rem; color: var(--mat-sys-on-surface-variant); cursor: grab; display: inline-flex; flex: 0 0 auto; font-size: 1.1rem; height: 1.1rem; justify-content: center; width: 2.2rem; }
 .drag-handle:hover { background: var(--mat-sys-secondary-container); color: var(--mat-sys-on-secondary-container); }
 .drag-handle:active { cursor: grabbing; }
@@ -57,7 +60,7 @@ mat-card-content { padding-top: 1rem; }
 .planning-hint { align-items: center; color: var(--mat-sys-on-surface-variant); display: flex; font-size: .78rem; gap: .35rem; margin: -.4rem 0 .6rem; }
 .planning-hint mat-icon { font-size: 1rem; height: 1rem; width: 1rem; }
 .calendar-scroll { border: 1px solid var(--mat-sys-outline-variant); border-radius: .75rem; max-height: calc(100vh - 10rem); overflow: auto; }
-table { border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; }
+table { border-collapse: separate; border-spacing: 0; min-width: 100%; table-layout: fixed; width: 100%; }
 th, td { border-bottom: 1px solid var(--mat-sys-outline-variant); border-right: 1px solid var(--mat-sys-outline-variant); min-width: 8rem; padding: .65rem; text-align: left; vertical-align: top; }
 thead th { background: var(--mat-sys-surface-container); position: sticky; top: 0; z-index: 4; }
 .week-column { background: var(--mat-sys-surface-container); left: 0; min-width: 6rem; position: sticky; width: 6rem; z-index: 3; }
@@ -71,13 +74,13 @@ td.eligible-drop-target { outline: 1px dashed color-mix(in srgb, var(--mat-sys-p
 td.cdk-drop-list-dragging { background-color: color-mix(in srgb, var(--mat-sys-primary-container) 65%, white); outline: 3px solid var(--mat-sys-primary); outline-offset: -3px; }
 td.fixed-day { background-color: var(--mat-sys-surface-container-high); }
 .lesson-slot { margin-top: .4rem; }
-.scheduled-topic { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: .3rem; margin-top: .2rem; padding: .22rem .3rem; }
-.scheduled-topic-heading { align-items: center; display: flex; gap: .35rem; }
-.scheduled-topic-heading > div { min-width: 0; }
+.scheduled-topic { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: .3rem; box-sizing: border-box; margin-top: .2rem; max-width: 100%; min-width: 0; overflow: hidden; padding: .22rem .3rem; width: 100%; }
+.scheduled-topic-heading { align-items: center; display: flex; gap: .35rem; max-width: 100%; min-width: 0; }
+.scheduled-topic-heading > div { flex: 1 1 auto; min-width: 0; }
 .scheduled-topic small { color: var(--mat-sys-primary); display: block; font-size: .65rem; font-weight: 600; line-height: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduled-topic strong { font-size: .75rem; line-height: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduled-topic span { color: var(--mat-sys-on-surface-variant); font-size: .65rem; line-height: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scheduled-actions { display: flex; justify-content: end; margin-top: .1rem; }
+.scheduled-actions { display: flex; flex-wrap: wrap; justify-content: end; margin-top: .1rem; max-width: 100%; }
 .topic-drag-preview { background: var(--mat-sys-surface); border: 2px solid var(--mat-sys-primary); border-radius: .4rem; box-shadow: var(--mat-sys-level3); font-size: .78rem; max-width: 14rem; overflow: hidden; padding: .4rem .6rem; text-overflow: ellipsis; white-space: nowrap; }
 .cdk-drag-placeholder { opacity: .3; }
 .cdk-drag-animating { transition: transform 150ms ease; }

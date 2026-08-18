@@ -64,6 +64,22 @@
                 } @empty { <p>No matching unplanned topic instances.</p> }
               </div>
 
+              <h3>Multiple Topic Planning</h3>
+              <div class="multiple-topic-planning">
+                <div class="button-row">
+                  <button mat-flat-button (click)="addAllTopics()" [disabled]="!selectedCourseId || busy || unplannedTopics.length === 0">Add all</button>
+                  <button mat-stroked-button (click)="removeAllTopics()" [disabled]="!selectedCourseId || busy || calendar?.planningSummary?.plannedTopicCount === 0">Remove all</button>
+                </div>
+                <mat-form-field>
+                  <mat-label>From</mat-label>
+                  <input matInput type="date" [(ngModel)]="multiplePlanningFrom" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!selectedCourseId || busy">
+                </mat-form-field>
+                <mat-form-field>
+                  <mat-label>Until</mat-label>
+                  <input matInput type="date" [(ngModel)]="multiplePlanningUntil" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!selectedCourseId || busy">
+                </mat-form-field>
+              </div>
+
               <div class="section-divider"></div>
               <h3>{{ editingTopicId ? 'Edit shared topic' : 'Add topic' }}</h3>
               <mat-form-field>

@@ -19,6 +19,16 @@ public sealed record DragTopicCommand(
     bool DeleteShiftsSchedule,
     bool InsertShiftsSchedule);
 
+public sealed record MultipleTopicPlanningCommand(
+    Guid CourseId,
+    DateOnly? From,
+    DateOnly? Until);
+
+public sealed record MultipleTopicPlanningResultDto(
+    int AffectedTopicCount,
+    DateOnly? FirstAffectedDate,
+    DateOnly? LastAffectedDate);
+
 public sealed record CourseRolloverCommand(
     Guid SourceCourseId,
     Guid TargetSchoolYearId,

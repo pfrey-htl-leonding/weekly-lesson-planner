@@ -879,6 +879,7 @@ export class App implements OnInit {
     const color = day.state === EffectiveDayState.Holiday ? this.config.holidayColor
       : day.state === EffectiveDayState.Event ? this.config.eventColor
       : day.state === EffectiveDayState.Exam ? this.config.examColor
+      : day.scheduledExams.length > 0 ? this.config.examColor
       : '';
     return color ? { 'border-left-color': color } : {};
   }

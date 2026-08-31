@@ -483,6 +483,35 @@ describe('App', () => {
     expect(card.querySelectorAll('button')).toHaveLength(0);
   });
 
+  it('applies configured fixed-day colors in the All topics calendar', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.config = {
+      visibleWeekdays: [IsoWeekday.Monday],
+      holidayColor: '#008000',
+      eventColor: '#0000ff',
+      examColor: '#ffff00',
+      weekNumbering: 'ISO 8601',
+    };
+    const aggregateExamDay = {
+      ...eligibleDay,
+      isCourseDay: false,
+      scheduledExams: [{
+        id: 'exam',
+        courseId: 'course',
+        courseName: 'Algorithms',
+        name: 'Written exam',
+      }],
+    };
+
+    expect(component.dayStyle({ ...eligibleDay, state: EffectiveDayState.Holiday }))
+      .toEqual({ 'border-left-color': '#008000' });
+    expect(component.dayStyle({ ...eligibleDay, state: EffectiveDayState.Event }))
+      .toEqual({ 'border-left-color': '#0000ff' });
+    expect(component.dayStyle(aggregateExamDay))
+      .toEqual({ 'border-left-color': '#ffff00' });
+  });
+
   it('shifts forward while preserving the source gap regardless of checkbox values', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;

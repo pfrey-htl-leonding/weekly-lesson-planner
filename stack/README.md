@@ -24,3 +24,26 @@ docker compose --env-file stack/.env -f stack/compose.yaml down
 
 Add `--volumes` to `down` only when intentionally deleting local PostgreSQL data.
 
+## PostgreSQL shutdown backups
+
+When the database container is stopped normally, it exports the complete database
+schema and contents to a timestamped SQL file before PostgreSQL shuts down. The
+files are stored separately from the live database in the
+`weekly-lesson-planner_postgres-backups` Docker volume.
+
+List the available exports while the database container is running:
+
+```bash
+docker compose --env-file stack/.env -f stack/compose.yaml exec db ls -lh /backups
+```
+
+Copy an export to the host by replacing `<backup-file.sql>` with a listed name:
+
+```bash
+docker compose --env-file stack/.env -f stack/compose.yaml cp db:/backups/<backup-file.sql> .
+```
+
+The hook runs for `stop`, `restart`, and `down` as long as Docker allows the
+container to stop gracefully. It cannot run after a host crash, power loss,
+`docker kill`, or an out-of-memory termination. Running `down --volumes` also
+deletes both the database and backup volumes after the export is created.

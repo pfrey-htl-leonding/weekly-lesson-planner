@@ -11,6 +11,63 @@ namespace WeeklyLessonPlanner.IntegrationTests.Infrastructure;
 public sealed class MultipleTopicPlanningTests
 {
     [PostgresFact]
+    public async Task AddAllUsesNumericTopicPrefixesBeforeAlphabeticalHeadings()
+    {
+        await using var dbContext = CreateDbContext();
+        await dbContext.Database.MigrateAsync();
+        var calendar = new CalendarService(dbContext);
+        var planning = new PlanningService(dbContext);
+        var topics = new TopicService(dbContext);
+        var monday = NextMonday(new DateOnly(2040, 9, 1));
+        var schoolYear = await calendar.CreateSchoolYearAsync(new(
+            $"Numeric topic order test {Guid.NewGuid():N}",
+            monday,
+            monday.AddDays(13)));
+
+        try
+        {
+            var course = await calendar.CreateCourseAsync(new(
+                schoolYear.Id,
+                "Numeric topic order course",
+                string.Empty,
+                [
+                    IsoWeekday.Monday,
+                    IsoWeekday.Tuesday,
+                    IsoWeekday.Wednesday,
+                    IsoWeekday.Thursday,
+                    IsoWeekday.Friday
+                ]));
+            foreach (var heading in new[]
+                     {
+                         "Zulu",
+                         "100 Topic 10",
+                         "Alpha",
+                         "10 Topic 1",
+                         "3Topic",
+                         "2 Topic"
+                     })
+            {
+                await topics.CreateTopicAsync(new(course.Id, heading, string.Empty));
+            }
+
+            var result = await planning.AddAllTopicsAsync(new(course.Id, null, null));
+
+            Assert.Equal(6, result.AffectedTopicCount);
+            Assert.Equal(
+                ["2 Topic", "10 Topic 1", "100 Topic 10", "3Topic", "Alpha", "Zulu"],
+                await dbContext.TopicAssignments.AsNoTracking()
+                    .Where(item => item.CourseId == course.Id)
+                    .OrderBy(item => item.Date)
+                    .Select(item => item.TopicInstance.Topic.Heading)
+                    .ToListAsync());
+        }
+        finally
+        {
+            await calendar.DeleteSchoolYearAsync(schoolYear.Id);
+        }
+    }
+
+    [PostgresFact]
     public async Task AddAndRemoveAllRespectOrderCapacityFixedDaysAndInclusiveInterval()
     {
         await using var dbContext = CreateDbContext();

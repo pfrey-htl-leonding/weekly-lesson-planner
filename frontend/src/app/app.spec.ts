@@ -208,11 +208,29 @@ describe('App', () => {
       .mockReturnValueOnce(of(courseCalendar('course-a', IsoWeekday.Monday, mondayTopic)))
       .mockReturnValueOnce(of(courseCalendar('course-b', IsoWeekday.Tuesday, tuesdayTopic)));
     vi.spyOn(topicApi, 'getTopics')
-      .mockReturnValueOnce(of([toTopic('topic-a', { courseId: 'course-a', heading: 'Arrays', description: '' })]))
-      .mockReturnValueOnce(of([toTopic('topic-b', { courseId: 'course-b', heading: 'Bacteria', description: '' })]));
+      .mockReturnValueOnce(of([
+        toTopic('topic-a-zulu', { courseId: 'course-a', heading: 'Zulu', description: '' }),
+        toTopic('topic-a-100', { courseId: 'course-a', heading: '100 Topic', description: '' }),
+        toTopic('topic-a-10', { courseId: 'course-a', heading: '10 First topic', description: '' }),
+        toTopic('topic-a-3-no-space', { courseId: 'course-a', heading: '3Topic', description: '' }),
+      ]))
+      .mockReturnValueOnce(of([
+        toTopic('topic-b-alpha', { courseId: 'course-b', heading: 'Alpha', description: '' }),
+        toTopic('topic-b-2', { courseId: 'course-b', heading: '2 Topic', description: '' }),
+        toTopic('topic-b-10', { courseId: 'course-b', heading: '10 Second topic', description: '' }),
+      ]));
     vi.spyOn(topicApi, 'getUnplannedInstances')
-      .mockReturnValueOnce(of([{ id: 'instance-a', topicId: 'topic-a', courseId: 'course-a', heading: 'Arrays', description: '' }]))
-      .mockReturnValueOnce(of([{ id: 'instance-b', topicId: 'topic-b', courseId: 'course-b', heading: 'Bacteria', description: '' }]));
+      .mockReturnValueOnce(of([
+        { id: 'instance-a-zulu', topicId: 'topic-a-zulu', courseId: 'course-a', heading: 'Zulu', description: '' },
+        { id: 'instance-a-100', topicId: 'topic-a-100', courseId: 'course-a', heading: '100 Topic', description: '' },
+        { id: 'instance-a-10', topicId: 'topic-a-10', courseId: 'course-a', heading: '10 First topic', description: '' },
+        { id: 'instance-a-3-no-space', topicId: 'topic-a-3-no-space', courseId: 'course-a', heading: '3Topic', description: '' },
+      ]))
+      .mockReturnValueOnce(of([
+        { id: 'instance-b-alpha', topicId: 'topic-b-alpha', courseId: 'course-b', heading: 'Alpha', description: '' },
+        { id: 'instance-b-2', topicId: 'topic-b-2', courseId: 'course-b', heading: '2 Topic', description: '' },
+        { id: 'instance-b-10', topicId: 'topic-b-10', courseId: 'course-b', heading: '10 Second topic', description: '' },
+      ]));
 
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
@@ -226,8 +244,17 @@ describe('App', () => {
     component.reloadCalendar();
 
     const days = component.calendar!.weeks[0].days;
-    expect(component.topics.map(topic => topic.courseId)).toEqual(['course-a', 'course-b']);
-    expect(component.unplannedTopics.map(topic => topic.courseId)).toEqual(['course-a', 'course-b']);
+    const expectedTopicOrder = [
+      '2 Topic',
+      '10 First topic',
+      '10 Second topic',
+      '100 Topic',
+      '3Topic',
+      'Alpha',
+      'Zulu',
+    ];
+    expect(component.topics.map(topic => topic.heading)).toEqual(expectedTopicOrder);
+    expect(component.unplannedTopics.map(topic => topic.heading)).toEqual(expectedTopicOrder);
     expect(days[0].scheduledTopics.map(topic => topic.courseId)).toEqual(['course-a']);
     expect(days[1].scheduledTopics.map(topic => topic.courseId)).toEqual(['course-b']);
     expect(component.calendar!.planningSummary).toEqual({

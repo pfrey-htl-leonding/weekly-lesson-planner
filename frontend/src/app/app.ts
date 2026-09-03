@@ -192,8 +192,8 @@ export class App implements OnInit {
         this.calendar = calendar;
         this.markers = markers;
         this.exams = exams;
-        this.topics = this.sortByCourseAndHeading(topics);
-        this.unplannedTopics = this.sortByCourseAndHeading(unplannedTopics);
+        this.topics = this.sortTopics(topics);
+        this.unplannedTopics = this.sortTopics(unplannedTopics);
         if (courseIds.length > 0) {
           if (!this.multiplePlanningFrom ||
               this.multiplePlanningFrom < calendar.planningStart ||
@@ -923,10 +923,30 @@ export class App implements OnInit {
     };
   }
 
-  private sortByCourseAndHeading<T extends { courseId: string; heading: string }>(items: T[]): T[] {
-    return [...items].sort((left, right) =>
-      this.courseName(left.courseId).localeCompare(this.courseName(right.courseId)) ||
-      left.heading.localeCompare(right.heading));
+  private sortTopics<T extends { id: string; heading: string }>(items: T[]): T[] {
+    return [...items].sort((left, right) => {
+      const leftNumber = this.topicNumberPrefix(left.heading);
+      const rightNumber = this.topicNumberPrefix(right.heading);
+      if (leftNumber !== null && rightNumber !== null) {
+        return leftNumber.length - rightNumber.length ||
+          this.compareOrdinal(leftNumber, rightNumber) ||
+          this.compareOrdinal(left.id, right.id);
+      }
+      if (leftNumber !== null) return -1;
+      if (rightNumber !== null) return 1;
+      return this.compareOrdinal(left.heading.toLowerCase(), right.heading.toLowerCase()) ||
+        this.compareOrdinal(left.heading, right.heading) ||
+        this.compareOrdinal(left.id, right.id);
+    });
+  }
+
+  private topicNumberPrefix(heading: string): string | null {
+    const match = /^(\d+) /.exec(heading);
+    return match ? match[1].replace(/^0+(?=\d)/, '') : null;
+  }
+
+  private compareOrdinal(left: string, right: string): number {
+    return left < right ? -1 : left > right ? 1 : 0;
   }
 
   private dayForCourse(courseId: string, date: string): CalendarDay | null {

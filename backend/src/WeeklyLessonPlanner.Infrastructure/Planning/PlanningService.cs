@@ -160,11 +160,12 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             .Include(item => item.Topic)
             .Include(item => item.Assignment)
             .Where(item => item.CourseId == command.CourseId && item.Assignment == null)
-            .OrderBy(item => item.Topic.Heading.ToLower())
-            .ThenBy(item => item.Topic.Heading)
-            .ThenBy(item => item.Id)
-            .Take(freeDates.Length)
             .ToListAsync(cancellationToken);
+        instances.Sort(CompareTopicInstances);
+        if (instances.Count > freeDates.Length)
+        {
+            instances.RemoveRange(freeDates.Length, instances.Count - freeDates.Length);
+        }
 
         for (var index = 0; index < instances.Count; index++)
         {
@@ -753,6 +754,54 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         }
 
         return (from, until);
+    }
+
+    private static int CompareTopicInstances(TopicInstance left, TopicInstance right)
+    {
+        var leftNumber = TopicNumberPrefix(left.Topic.Heading);
+        var rightNumber = TopicNumberPrefix(right.Topic.Heading);
+        if (leftNumber is not null && rightNumber is not null)
+        {
+            var numberComparison = leftNumber.Length.CompareTo(rightNumber.Length);
+            if (numberComparison == 0)
+            {
+                numberComparison = string.Compare(leftNumber, rightNumber, StringComparison.Ordinal);
+            }
+
+            return numberComparison != 0 ? numberComparison : CompareTopicInstanceIds(left.Id, right.Id);
+        }
+
+        if (leftNumber is not null) return -1;
+        if (rightNumber is not null) return 1;
+
+        var headingComparison = string.Compare(
+            left.Topic.Heading,
+            right.Topic.Heading,
+            StringComparison.OrdinalIgnoreCase);
+        if (headingComparison == 0)
+        {
+            headingComparison = string.Compare(
+                left.Topic.Heading,
+                right.Topic.Heading,
+                StringComparison.Ordinal);
+        }
+
+        return headingComparison != 0 ? headingComparison : CompareTopicInstanceIds(left.Id, right.Id);
+    }
+
+    private static int CompareTopicInstanceIds(Guid left, Guid right) => string.Compare(
+        left.ToString("D"),
+        right.ToString("D"),
+        StringComparison.Ordinal);
+
+    private static string? TopicNumberPrefix(string heading)
+    {
+        var separator = heading.IndexOf(' ');
+        if (separator <= 0) return null;
+        var digits = heading[..separator];
+        if (digits.Any(character => character is < '0' or > '9')) return null;
+        var normalized = digits.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
     }
 
     private async Task<PlanningImpactDto> PersistScheduleAsync(

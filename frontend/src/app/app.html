@@ -15,9 +15,18 @@
         <mat-tab-group dynamicHeight animationDuration="150ms" [(selectedIndex)]="managementTabIndex">
           <mat-tab label="Topic management">
             <div class="tab-content form-grid">
-              @if (!selectedCourseId) {
-                <p>Select a course in the Course view to manage its topics.</p>
+              @if (selectedCourseIds.length === 0) {
+                <p>Select one or more courses in the Course view to manage their topics.</p>
               }
+
+              <mat-form-field>
+                <mat-label>Course for add and bulk actions</mat-label>
+                <mat-select [(ngModel)]="topicCourseId" [disabled]="selectedCourseIds.length === 0 || !!editingTopicId">
+                  @for (course of coursesForSelectedSchoolYear(); track course.id) {
+                    @if (isCourseSelected(course.id)) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }
+                  }
+                </mat-select>
+              </mat-form-field>
 
               @if (calendar?.planningSummary; as summary) {
                 <div class="topic-planning-summary" aria-label="Course topic planning summary">
@@ -30,11 +39,11 @@
               <mat-form-field>
                 <mat-label>Search topic list</mat-label>
                 <mat-icon matPrefix aria-hidden="true">search</mat-icon>
-                <input matInput [(ngModel)]="topicSearch" [disabled]="!selectedCourseId">
+                <input matInput [(ngModel)]="topicSearch" [disabled]="selectedCourseIds.length === 0">
               </mat-form-field>
               <mat-form-field>
                 <mat-label>Target lesson date</mat-label>
-                <input matInput type="date" [(ngModel)]="placementDate" [disabled]="!selectedCourseId">
+                <input matInput type="date" [(ngModel)]="placementDate" [disabled]="selectedCourseIds.length === 0">
                 <mat-hint>Used by the keyboard-accessible Place buttons.</mat-hint>
               </mat-form-field>
               <div
@@ -48,9 +57,10 @@
                     class="topic-instance"
                     cdkDrag
                     [cdkDragData]="unplannedDragData(instance)"
-                    [cdkDragDisabled]="busy || !selectedCourseId">
+                    [cdkDragDisabled]="busy">
                     <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to a lesson day">drag_indicator</mat-icon>
                     <div>
+                      @if (selectedCourseIds.length > 1) { <small>{{ courseName(instance.courseId) }}</small> }
                       <strong>{{ instance.heading }}</strong>
                       <p [title]="instance.description">{{ instance.description || 'No description' }}</p>
                     </div>
@@ -67,16 +77,16 @@
               <h3>Multiple Topic Planning</h3>
               <div class="multiple-topic-planning">
                 <div class="button-row">
-                  <button mat-flat-button (click)="addAllTopics()" [disabled]="!selectedCourseId || busy || unplannedTopics.length === 0">Add all</button>
-                  <button mat-stroked-button (click)="removeAllTopics()" [disabled]="!selectedCourseId || busy || calendar?.planningSummary?.plannedTopicCount === 0">Remove all</button>
+                  <button mat-flat-button (click)="addAllTopics()" [disabled]="!topicCourseId || busy || !hasUnplannedTopicsForTopicCourse()">Add all</button>
+                  <button mat-stroked-button (click)="removeAllTopics()" [disabled]="!topicCourseId || busy || !hasPlannedTopicsForTopicCourse()">Remove all</button>
                 </div>
                 <mat-form-field>
                   <mat-label>From</mat-label>
-                  <input matInput type="date" [(ngModel)]="multiplePlanningFrom" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!selectedCourseId || busy">
+                  <input matInput type="date" [(ngModel)]="multiplePlanningFrom" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!topicCourseId || busy">
                 </mat-form-field>
                 <mat-form-field>
                   <mat-label>Until</mat-label>
-                  <input matInput type="date" [(ngModel)]="multiplePlanningUntil" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!selectedCourseId || busy">
+                  <input matInput type="date" [(ngModel)]="multiplePlanningUntil" [min]="calendar?.planningStart" [max]="calendar?.planningEnd" [disabled]="!topicCourseId || busy">
                 </mat-form-field>
               </div>
 
@@ -84,14 +94,14 @@
               <h3>{{ editingTopicId ? 'Edit shared topic' : 'Add topic' }}</h3>
               <mat-form-field>
                 <mat-label>Heading</mat-label>
-                <input matInput [(ngModel)]="topicDraft.heading" maxlength="200" [disabled]="!selectedCourseId">
+                <input matInput [(ngModel)]="topicDraft.heading" maxlength="200" [disabled]="!topicCourseId">
               </mat-form-field>
               <mat-form-field>
                 <mat-label>Description</mat-label>
-                <textarea matInput [(ngModel)]="topicDraft.description" rows="3" maxlength="4000" [disabled]="!selectedCourseId"></textarea>
+                <textarea matInput [(ngModel)]="topicDraft.description" rows="3" maxlength="4000" [disabled]="!topicCourseId"></textarea>
               </mat-form-field>
               <div class="button-row">
-                <button mat-flat-button (click)="saveTopic()" [disabled]="!selectedCourseId || busy">{{ editingTopicId ? 'Update' : 'Add' }} topic</button>
+                <button mat-flat-button (click)="saveTopic()" [disabled]="!topicCourseId || busy">{{ editingTopicId ? 'Update' : 'Add' }} topic</button>
                 @if (editingTopicId) { <button mat-button (click)="clearTopic()">Cancel</button> }
               </div>
 
@@ -100,20 +110,21 @@
                 @for (topic of topics; track topic.id) {
                   <div>
                     <button mat-button (click)="editTopic(topic)">{{ topic.heading }}</button>
+                    @if (selectedCourseIds.length > 1) { <small class="course-label">{{ courseName(topic.courseId) }}</small> }
                     <span>{{ topic.unplannedInstanceCount }} unplanned · {{ topic.plannedInstanceCount }} planned</span>
                     <button mat-icon-button [attr.aria-label]="'Delete topic definition ' + topic.heading" (click)="deleteTopic(topic)"><mat-icon>delete_forever</mat-icon></button>
                   </div>
-                } @empty { <p>No topic definitions for this course.</p> }
+                } @empty { <p>No topic definitions for the selected courses.</p> }
               </div>
             </div>
           </mat-tab>
 
           <mat-tab label="Course exam">
             <div class="tab-content form-grid">
-              @if (!selectedCourseId) { <p>Select a course in the Course view to manage its exams.</p> }
-              <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="examDraft.date" [disabled]="!selectedCourseId"></mat-form-field>
-              <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId"></mat-form-field>
-              <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
+              @if (!selectedCourseId) { <p>Select exactly one course in the Course view to add an exam.</p> }
+              <mat-form-field><mat-label>Date</mat-label><input matInput type="date" [(ngModel)]="examDraft.date" [disabled]="!selectedCourseId && !editingExamId"></mat-form-field>
+              <mat-form-field><mat-label>Name</mat-label><input matInput [(ngModel)]="examDraft.name" maxlength="200" [disabled]="!selectedCourseId && !editingExamId"></mat-form-field>
+              <div class="button-row"><button mat-flat-button (click)="saveExam()" [disabled]="!editingExamId && !selectedCourseId">{{ editingExamId ? 'Update' : 'Add' }} exam</button>@if (editingExamId) { <button mat-button (click)="clearExam()">Cancel</button> }</div>
               <div class="resource-list">
                 @for (exam of exams; track exam.id) {
                   <div>
@@ -277,7 +288,7 @@
               </mat-radio-group>
 
               @if (dataTransferKind === 'topics') {
-                <p class="field-note">Topics apply to the course selected in Course view.</p>
+                <p class="field-note">Topic import/export is available when exactly one course is selected in Course view.</p>
               } @else {
                 <p class="field-note">Courses apply to {{ selectedSchoolYear()?.name || 'the selected school year' }} and use the visible weekdays configured in Options.</p>
               }
@@ -298,7 +309,21 @@
         <div class="calendar-controls">
           <div class="calendar-view-selectors">
             <mat-form-field><mat-label>School year</mat-label><mat-select [(ngModel)]="selectedSchoolYearId" (selectionChange)="changeSchoolYearView()">@for (schoolYear of schoolYears; track schoolYear.id) { <mat-option [value]="schoolYear.id">{{ schoolYear.name }}</mat-option> }</mat-select></mat-form-field>
-            <mat-form-field><mat-label>Course view</mat-label><mat-select [(ngModel)]="selectedCourseId" (selectionChange)="changeCourseView()"><mat-option value="">All topics</mat-option>@for (course of coursesForSelectedSchoolYear(); track course.id) { <mat-option [value]="course.id">{{ course.name }}</mat-option> }</mat-select></mat-form-field>
+            <mat-form-field>
+              <mat-label>Course view</mat-label>
+              <mat-select #courseSelect multiple [(ngModel)]="selectedCourseIds" (selectionChange)="changeCourseView()">
+                <mat-select-trigger>
+                  @if (selectedCourseIds.length === 0) { All topics }
+                  @else if (selectedCourseIds.length === 1) { {{ courseName(selectedCourseIds[0]) }} }
+                  @else { {{ selectedCourseIds.length }} courses }
+                </mat-select-trigger>
+                @for (course of coursesForSelectedSchoolYear(); track course.id) {
+                  <mat-option [value]="course.id">
+                    <span class="course-option-name" (click)="selectOnlyCourse(course.id, courseSelect, $event)">{{ course.name }}</span>
+                  </mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
           </div>
           <div class="planning-options" aria-label="Schedule shift options">
             <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
@@ -307,10 +332,10 @@
         </div>
       </div>
 
-      @if (!selectedCourseId) {
-        <p class="planning-hint"><mat-icon aria-hidden="true">info</mat-icon>Select one course to place, move, copy, or remove topics. All topics remains a read-only aggregate view.</p>
+      @if (selectedCourseIds.length === 0) {
+        <p class="planning-hint"><mat-icon aria-hidden="true">info</mat-icon>Select one or more courses to place, move, copy, or remove topics. All topics remains a read-only aggregate view.</p>
       } @else {
-        <p class="planning-hint"><mat-icon aria-hidden="true">drag_indicator</mat-icon>Drag an unplanned topic onto an eligible lesson day, drag a scheduled topic between days, or use its buttons. Changes occur only on drop.</p>
+        <p class="planning-hint"><mat-icon aria-hidden="true">drag_indicator</mat-icon>Topics from the selected courses are combined here. Every placement, move, and removal stays within its topic’s course.</p>
       }
 
       @if (calendar) {
@@ -324,14 +349,14 @@
                     <td
                       cdkDropList
                       [cdkDropListData]="day"
-                      [cdkDropListDisabled]="!canDropOnDay(day)"
+                      [cdkDropListDisabled]="busy || selectedCourseIds.length === 0"
                       [cdkDropListEnterPredicate]="canEnterDay"
                       [cdkDropListSortingDisabled]="true"
                       (cdkDropListDropped)="onDayDrop($event, day)"
                       [class.outside-range]="!day.isInPlanningRange"
                       [class.course-day]="day.isCourseDay"
                       [class.fixed-day]="day.state !== states.Normal"
-                      [class.eligible-drop-target]="canDropOnDay(day)"
+                      [class.eligible-drop-target]="canAnySelectedCourseDropOnDay(day)"
                       [ngStyle]="dayStyle(day)">
                       <span class="date">{{ calendarDateLabel(day.date) }}</span>
                       @if (day.state === states.Exam && examOnDate(day.date); as exam) {
@@ -346,7 +371,7 @@
                       }
                       @else if (day.state !== states.Normal) { <strong>{{ stateName(day.state) }}</strong><span>{{ day.label }}</span> }
                       @else if (day.isCourseDay) { <span class="lesson-slot">Lesson day</span> }
-                      @if (!selectedCourseId) {
+                      @if (selectedCourseIds.length !== 1) {
                         @for (exam of day.scheduledExams; track exam.id) {
                           <article class="scheduled-topic exam-card">
                             <small>{{ exam.courseName }}</small>
@@ -360,19 +385,19 @@
                           class="scheduled-topic"
                           cdkDrag
                           [cdkDragData]="scheduledDragData(topic, day.date)"
-                          [cdkDragDisabled]="busy || !selectedCourseId">
+                          [cdkDragDisabled]="busy || selectedCourseIds.length === 0">
                           <div class="scheduled-topic-heading">
-                            @if (selectedCourseId) { <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to another lesson day">drag_indicator</mat-icon> }
+                            @if (selectedCourseIds.length > 0) { <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to another lesson day">drag_indicator</mat-icon> }
                             <div>
-                              @if (!selectedCourseId) { <small>{{ topic.courseName }}</small> }
+                              @if (selectedCourseIds.length !== 1) { <small>{{ topic.courseName }}</small> }
                               <strong>{{ topic.heading }}</strong>
                             </div>
                           </div>
                           @if (topic.description) { <span [title]="topic.description">{{ topic.description }}</span> }
-                          @if (selectedCourseId) {
+                          @if (selectedCourseIds.length > 0) {
                             <div class="scheduled-actions">
-                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move ' + topic.heading + ' to the previous eligible day'" (click)="moveScheduled(topic, day.date, -1)" [disabled]="busy || !canMoveScheduled(day.date, -1)"><mat-icon>arrow_back</mat-icon></button>
-                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Shift ' + topic.heading + ' forward one eligible day and leave its current day empty'" title="Shift forward; leave current day empty" (click)="moveScheduled(topic, day.date, 1)" [disabled]="busy || !canMoveScheduled(day.date, 1)"><mat-icon>arrow_forward</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Move ' + topic.heading + ' to the previous eligible day'" (click)="moveScheduled(topic, day.date, -1)" [disabled]="busy || !canMoveScheduled(day.date, -1, topic.courseId)"><mat-icon>arrow_back</mat-icon></button>
+                              <button mat-icon-button class="compact-icon" [attr.aria-label]="'Shift ' + topic.heading + ' forward one eligible day and leave its current day empty'" title="Shift forward; leave current day empty" (click)="moveScheduled(topic, day.date, 1)" [disabled]="busy || !canMoveScheduled(day.date, 1, topic.courseId)"><mat-icon>arrow_forward</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Edit topic ' + topic.heading" (click)="editTopic(topic)" [disabled]="busy"><mat-icon>edit</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Copy ' + topic.heading + ' to the unplanned list'" (click)="copyScheduledTopic(topic)" [disabled]="busy"><mat-icon>content_copy</mat-icon></button>
                               <button mat-icon-button class="compact-icon" [attr.aria-label]="'Remove ' + topic.heading + ' from the schedule'" (click)="removeScheduledTopic(topic)" [disabled]="busy"><mat-icon>event_busy</mat-icon></button>

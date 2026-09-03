@@ -9,12 +9,12 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { forkJoin, Observable, of } from 'rxjs';
+import { forkJoin, map, Observable, of } from 'rxjs';
 import {
   AppConfig,
   CalendarApi,
@@ -85,10 +85,12 @@ export class App implements OnInit {
   markers: GlobalDayMarker[] = [];
   exams: CourseExam[] = [];
   calendar: CalendarView | null = null;
+  courseCalendars: Record<string, CalendarView> = {};
   topics: TopicDefinition[] = [];
   unplannedTopics: TopicInstance[] = [];
   managementTabIndex = 0;
-  selectedCourseId = '';
+  selectedCourseIds: string[] = [];
+  topicCourseId = '';
   selectedSchoolYearId = '';
   schoolYearDraft: SaveSchoolYear = { name: '', planningStart: '', planningEnd: '' };
   editingSchoolYearId: string | null = null;
@@ -104,6 +106,7 @@ export class App implements OnInit {
   editingMarkerId: string | null = null;
   examDraft = { date: '', name: '' };
   editingExamId: string | null = null;
+  editingExamCourseId = '';
   topicDraft: Omit<SaveTopic, 'courseId'> = { heading: '', description: '' };
   editingTopicId: string | null = null;
   topicSearch = '';
@@ -123,6 +126,16 @@ export class App implements OnInit {
     drop: CdkDropList<CalendarDay>,
   ): boolean => this.canDropOnDay(drop.data, drag.data.courseId);
 
+  /** The legacy single-course value is also the course used by single-course-only forms. */
+  get selectedCourseId(): string {
+    return this.selectedCourseIds.length === 1 ? this.selectedCourseIds[0] : '';
+  }
+
+  set selectedCourseId(courseId: string) {
+    this.selectedCourseIds = courseId ? [courseId] : [];
+    this.topicCourseId = courseId;
+  }
+
   ngOnInit(): void {
     this.reloadAll();
   }
@@ -141,12 +154,13 @@ export class App implements OnInit {
         if (!this.selectedSchoolYearId || !schoolYears.some(item => item.id === this.selectedSchoolYearId)) {
           this.selectedSchoolYearId = schoolYears[0]?.id ?? '';
         }
-        if (this.selectedCourseId && !courses.some(course => course.id === this.selectedCourseId)) {
-          this.selectedCourseId = '';
+        this.selectedCourseIds = this.selectedCourseIds.filter(id => courses.some(course => course.id === id));
+        if (this.selectedCourseIds.length > 0) {
+          this.selectedSchoolYearId = courses.find(course => course.id === this.selectedCourseIds[0])?.schoolYearId ?? this.selectedSchoolYearId;
+          this.selectedCourseIds = this.selectedCourseIds.filter(id =>
+            courses.find(course => course.id === id)?.schoolYearId === this.selectedSchoolYearId);
         }
-        if (this.selectedCourseId) {
-          this.selectedSchoolYearId = courses.find(course => course.id === this.selectedCourseId)?.schoolYearId ?? this.selectedSchoolYearId;
-        }
+        this.syncTopicCourse();
         this.courseDraft.schoolYearId ||= this.selectedSchoolYearId;
         this.syncRolloverOptions();
         this.changeDetector.markForCheck();
@@ -158,22 +172,29 @@ export class App implements OnInit {
 
   reloadCalendar(): void {
     this.busy = true;
+    const courseIds = [...this.selectedCourseIds];
+    const calendarRequests = courseIds.length > 0
+      ? courseIds.map(courseId => this.api.getCalendar(courseId, undefined))
+      : [this.api.getCalendar(undefined, this.selectedSchoolYearId || undefined)];
     forkJoin({
-      calendar: this.api.getCalendar(this.selectedCourseId || undefined, this.selectedSchoolYearId || undefined),
+      calendars: forkJoin(calendarRequests),
       markers: this.selectedSchoolYearId ? this.api.getMarkers(this.selectedSchoolYearId) : of([]),
-      exams: this.selectedCourseId ? this.api.getExams(this.selectedCourseId) : of([]),
-      topics: this.selectedCourseId ? this.topicApi.getTopics(this.selectedCourseId) : of<TopicDefinition[]>([]),
-      unplannedTopics: this.selectedCourseId
-        ? this.topicApi.getUnplannedInstances(this.selectedCourseId)
-        : of<TopicInstance[]>([]),
+      exams: this.combineCourseRequests(courseIds.map(courseId => this.api.getExams(courseId))),
+      topics: this.combineCourseRequests(courseIds.map(courseId => this.topicApi.getTopics(courseId))),
+      unplannedTopics: this.combineCourseRequests(
+        courseIds.map(courseId => this.topicApi.getUnplannedInstances(courseId))),
     }).subscribe({
-      next: ({ calendar, markers, exams, topics, unplannedTopics }) => {
+      next: ({ calendars, markers, exams, topics, unplannedTopics }) => {
+        this.courseCalendars = Object.fromEntries(
+          calendars.filter(calendar => calendar.courseId).map(calendar => [calendar.courseId!, calendar]),
+        );
+        const calendar = courseIds.length > 0 ? this.mergeCourseCalendars(calendars) : calendars[0];
         this.calendar = calendar;
         this.markers = markers;
         this.exams = exams;
-        this.topics = topics;
-        this.unplannedTopics = unplannedTopics;
-        if (this.selectedCourseId) {
+        this.topics = this.sortByCourseAndHeading(topics);
+        this.unplannedTopics = this.sortByCourseAndHeading(unplannedTopics);
+        if (courseIds.length > 0) {
           if (!this.multiplePlanningFrom ||
               this.multiplePlanningFrom < calendar.planningStart ||
               this.multiplePlanningFrom > calendar.planningEnd) {
@@ -197,13 +218,22 @@ export class App implements OnInit {
   }
 
   changeCourseView(): void {
-    if (this.selectedCourseId) {
-      this.selectedSchoolYearId = this.courses.find(course => course.id === this.selectedCourseId)?.schoolYearId ?? this.selectedSchoolYearId;
-      this.rolloverDraft.sourceCourseId = this.selectedCourseId;
+    const firstCourseId = this.selectedCourseIds[0];
+    if (firstCourseId) {
+      this.selectedSchoolYearId = this.courses.find(course => course.id === firstCourseId)?.schoolYearId ?? this.selectedSchoolYearId;
+      if (this.selectedCourseIds.length === 1) this.rolloverDraft.sourceCourseId = firstCourseId;
     }
+    this.syncTopicCourse();
     this.clearExam();
     this.clearTopic();
     this.reloadCalendar();
+  }
+
+  selectOnlyCourse(courseId: string, select: MatSelect, event: MouseEvent): void {
+    event.stopPropagation();
+    this.selectedCourseIds = [courseId];
+    this.changeCourseView();
+    select.close();
   }
 
   saveConfig(): void {
@@ -225,7 +255,8 @@ export class App implements OnInit {
   }
 
   changeSchoolYearView(): void {
-    this.selectedCourseId = '';
+    this.selectedCourseIds = [];
+    this.topicCourseId = '';
     this.courseDraft.schoolYearId = this.selectedSchoolYearId;
     this.clearExam();
     this.clearTopic();
@@ -317,7 +348,8 @@ export class App implements OnInit {
     if (!window.confirm(`Delete course “${course.name}” and its calendar data?`)) return;
     this.api.deleteCourse(course.id).subscribe({
       next: () => {
-        if (this.selectedCourseId === course.id) this.selectedCourseId = '';
+        this.selectedCourseIds = this.selectedCourseIds.filter(id => id !== course.id);
+        this.syncTopicCourse();
         this.succeed('Course deleted.');
         this.reloadAll();
       },
@@ -426,17 +458,20 @@ export class App implements OnInit {
 
   editExam(exam: CourseExam): void {
     this.editingExamId = exam.id;
+    this.editingExamCourseId = exam.courseId;
     this.examDraft = { date: exam.date, name: exam.name };
   }
 
   clearExam(): void {
     this.editingExamId = null;
+    this.editingExamCourseId = '';
     this.examDraft = { date: '', name: '' };
   }
 
   saveExam(): void {
-    if (!this.selectedCourseId) return;
-    const command = { courseId: this.selectedCourseId, ...this.examDraft };
+    const courseId = this.editingExamCourseId || this.selectedCourseId;
+    if (!courseId) return;
+    const command = { courseId, ...this.examDraft };
     const request = this.editingExamId
       ? this.api.updateExam(this.editingExamId, command)
       : this.api.createExam(command);
@@ -479,6 +514,7 @@ export class App implements OnInit {
 
   editTopic(topic: TopicDefinition | TopicInstance | ScheduledTopic): void {
     this.editingTopicId = 'topicId' in topic ? topic.topicId : topic.id;
+    this.topicCourseId = topic.courseId;
     this.topicDraft = { heading: topic.heading, description: topic.description };
     this.managementTabIndex = 0;
     this.changeDetector.markForCheck();
@@ -487,11 +523,12 @@ export class App implements OnInit {
   clearTopic(): void {
     this.editingTopicId = null;
     this.topicDraft = { heading: '', description: '' };
+    this.syncTopicCourse();
   }
 
   saveTopic(): void {
-    if (!this.selectedCourseId) return;
-    const command: SaveTopic = { courseId: this.selectedCourseId, ...this.topicDraft };
+    if (!this.topicCourseId || !this.isCourseSelected(this.topicCourseId)) return;
+    const command: SaveTopic = { courseId: this.topicCourseId, ...this.topicDraft };
     const wasEditing = this.editingTopicId !== null;
     const request = this.editingTopicId
       ? this.topicApi.updateTopic(this.editingTopicId, command)
@@ -537,6 +574,14 @@ export class App implements OnInit {
     return this.courses.filter(course => course.schoolYearId === this.selectedSchoolYearId);
   }
 
+  courseName(courseId: string): string {
+    return this.courses.find(course => course.id === courseId)?.name ?? 'Unknown course';
+  }
+
+  isCourseSelected(courseId: string): boolean {
+    return this.selectedCourseIds.includes(courseId);
+  }
+
   selectedSchoolYear(): SchoolYear | null {
     return this.schoolYears.find(item => item.id === this.selectedSchoolYearId) ?? null;
   }
@@ -554,8 +599,13 @@ export class App implements OnInit {
   }
 
   canDropOnDay(day: CalendarDay, courseId = this.selectedCourseId): boolean {
-    return !this.busy && !!this.selectedCourseId && courseId === this.selectedCourseId &&
-      day.isInPlanningRange && day.isCourseDay && day.state === EffectiveDayState.Normal;
+    const courseDay = this.dayForCourse(courseId, day.date) ?? day;
+    return !this.busy && !!courseId && this.isCourseSelected(courseId) &&
+      courseDay.isInPlanningRange && courseDay.isCourseDay && courseDay.state === EffectiveDayState.Normal;
+  }
+
+  canAnySelectedCourseDropOnDay(day: CalendarDay): boolean {
+    return this.selectedCourseIds.some(courseId => this.canDropOnDay(day, courseId));
   }
 
   onDayDrop(event: CdkDragDrop<CalendarDay, unknown, PlannerDragData>, day: CalendarDay): void {
@@ -573,19 +623,19 @@ export class App implements OnInit {
 
   onTopicListDrop(event: CdkDragDrop<TopicInstance[], unknown, PlannerDragData>): void {
     const dragged = event.item.data;
-    if (dragged.kind !== 'scheduled' || dragged.courseId !== this.selectedCourseId || this.busy) return;
+    if (dragged.kind !== 'scheduled' || !this.isCourseSelected(dragged.courseId) || this.busy) return;
     this.removeScheduledTopic(dragged.topic);
   }
 
   placeTopic(instance: TopicInstance, date = this.placementDate): void {
-    if (!this.selectedCourseId || !date) {
+    if (!this.isCourseSelected(instance.courseId) || !date) {
       this.fail('Choose a target lesson date first.');
       return;
     }
 
     this.runPlanningCommand(this.planningApi.place({
       topicInstanceId: instance.id,
-      courseId: this.selectedCourseId,
+      courseId: instance.courseId,
       date,
       insertShiftsSchedule: this.insertShiftsSchedule,
     }), `Placed “${instance.heading}”`);
@@ -615,10 +665,10 @@ export class App implements OnInit {
   }
 
   addAllTopics(): void {
-    if (!this.selectedCourseId) return;
+    if (!this.topicCourseId || !this.isCourseSelected(this.topicCourseId)) return;
     this.runMultipleTopicPlanningCommand(
       this.planningApi.addAll({
-        courseId: this.selectedCourseId,
+        courseId: this.topicCourseId,
         from: this.multiplePlanningFrom || null,
         until: this.multiplePlanningUntil || null,
       }),
@@ -627,10 +677,10 @@ export class App implements OnInit {
   }
 
   removeAllTopics(): void {
-    if (!this.selectedCourseId) return;
+    if (!this.topicCourseId || !this.isCourseSelected(this.topicCourseId)) return;
     this.runMultipleTopicPlanningCommand(
       this.planningApi.removeAll({
-        courseId: this.selectedCourseId,
+        courseId: this.topicCourseId,
         from: this.multiplePlanningFrom || null,
         until: this.multiplePlanningUntil || null,
       }),
@@ -663,12 +713,12 @@ export class App implements OnInit {
     });
   }
 
-  canMoveScheduled(sourceDate: string, direction: -1 | 1): boolean {
-    return this.relativeLessonDate(sourceDate, direction) !== null;
+  canMoveScheduled(sourceDate: string, direction: -1 | 1, courseId = this.selectedCourseId): boolean {
+    return this.relativeLessonDate(sourceDate, direction, courseId) !== null;
   }
 
   moveScheduled(topic: ScheduledTopic, sourceDate: string, direction: -1 | 1): void {
-    const destination = this.relativeLessonDate(sourceDate, direction);
+    const destination = this.relativeLessonDate(sourceDate, direction, topic.courseId);
     if (!destination) {
       this.fail(`There is no ${direction < 0 ? 'earlier' : 'later'} eligible lesson day in the calendar.`);
       return;
@@ -685,9 +735,11 @@ export class App implements OnInit {
     this.dragScheduledTopic(topic, destination);
   }
 
-  private relativeLessonDate(sourceDate: string, direction: -1 | 1): string | null {
-    if (!this.calendar || !this.selectedCourseId) return null;
-    const eligibleDates = this.calendar.weeks
+  private relativeLessonDate(sourceDate: string, direction: -1 | 1, courseId: string): string | null {
+    const calendar = this.courseCalendars[courseId] ??
+      (this.selectedCourseIds.length === 1 && this.selectedCourseId === courseId ? this.calendar : null);
+    if (!calendar || !this.isCourseSelected(courseId)) return null;
+    const eligibleDates = calendar.weeks
       .flatMap(week => week.days)
       .filter(day => day.isInPlanningRange && day.isCourseDay && day.state === EffectiveDayState.Normal)
       .map(day => day.date);
@@ -818,6 +870,75 @@ export class App implements OnInit {
       },
       error: error => this.handleError(error),
     });
+  }
+
+  hasUnplannedTopicsForTopicCourse(): boolean {
+    return this.unplannedTopics.some(topic => topic.courseId === this.topicCourseId);
+  }
+
+  hasPlannedTopicsForTopicCourse(): boolean {
+    return (this.courseCalendars[this.topicCourseId]?.planningSummary?.plannedTopicCount ?? 0) > 0;
+  }
+
+  private combineCourseRequests<T>(requests: Observable<T[]>[]): Observable<T[]> {
+    if (requests.length === 0) return of([]);
+    return forkJoin(requests).pipe(map(results => results.flat()));
+  }
+
+  private mergeCourseCalendars(calendars: CalendarView[]): CalendarView {
+    if (calendars.length === 1) return calendars[0];
+
+    const base = calendars[0];
+    const summaries = calendars
+      .map(calendar => calendar.planningSummary)
+      .filter(summary => summary !== null);
+    return {
+      ...base,
+      courseId: null,
+      planningSummary: {
+        lessonDayCount: summaries.reduce((total, summary) => total + summary.lessonDayCount, 0),
+        plannedTopicCount: summaries.reduce((total, summary) => total + summary.plannedTopicCount, 0),
+        unplannedTopicCount: summaries.reduce((total, summary) => total + summary.unplannedTopicCount, 0),
+      },
+      weeks: base.weeks.map(week => ({
+        ...week,
+        days: week.days.map(day => {
+          const courseDays = calendars
+            .map(calendar => calendar.weeks
+              .flatMap(item => item.days)
+              .find(item => item.date === day.date))
+            .filter(item => item !== undefined);
+          const globalFixedDay = courseDays.find(item =>
+            item.state === EffectiveDayState.Holiday || item.state === EffectiveDayState.Event);
+          return {
+            ...day,
+            isCourseDay: courseDays.some(item => item.isCourseDay),
+            state: globalFixedDay?.state ?? EffectiveDayState.Normal,
+            label: globalFixedDay?.label ?? null,
+            scheduledTopics: courseDays.flatMap(item => item.scheduledTopics),
+            scheduledExams: courseDays.flatMap(item => item.scheduledExams),
+          };
+        }),
+      })),
+    };
+  }
+
+  private sortByCourseAndHeading<T extends { courseId: string; heading: string }>(items: T[]): T[] {
+    return [...items].sort((left, right) =>
+      this.courseName(left.courseId).localeCompare(this.courseName(right.courseId)) ||
+      left.heading.localeCompare(right.heading));
+  }
+
+  private dayForCourse(courseId: string, date: string): CalendarDay | null {
+    return this.courseCalendars[courseId]?.weeks
+      .flatMap(week => week.days)
+      .find(day => day.date === date) ?? null;
+  }
+
+  private syncTopicCourse(): void {
+    if (!this.selectedCourseIds.includes(this.topicCourseId)) {
+      this.topicCourseId = this.selectedCourseIds[0] ?? '';
+    }
   }
 
   private normalizeName(name: string): string {

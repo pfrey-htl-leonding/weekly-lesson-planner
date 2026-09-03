@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
+import { MatSelect } from '@angular/material/select';
 import { Observable, of, Subject } from 'rxjs';
 import { App } from './app';
 import { CalendarApi, CalendarView, EffectiveDayState, IsoWeekday } from './core/api/calendar-api';
-import { SaveTopic, TopicApi, TopicDefinition } from './core/api/topic-api';
+import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
 import { PlanningApi, PlanningImpact } from './core/api/planning-api';
 
 const calendarApi = {
@@ -35,7 +36,7 @@ const toTopic = (id: string, command: SaveTopic): TopicDefinition => ({
 
 const topicApi = {
   getTopics: () => of<TopicDefinition[]>([]),
-  getUnplannedInstances: () => of([]),
+  getUnplannedInstances: (): Observable<TopicInstance[]> => of([]),
   createTopic: vi.fn((command: SaveTopic) => of(toTopic('created', command))),
   updateTopic: vi.fn((id: string, command: SaveTopic) => of(toTopic(id, command))),
   copyScheduledInstance: vi.fn(() => of({
@@ -173,6 +174,128 @@ describe('App', () => {
     fixture.componentInstance.topicSearch = 'binary';
 
     expect(fixture.componentInstance.visibleUnplannedTopics().map(topic => topic.id)).toEqual(['1']);
+  });
+
+  it('combines selected course calendars and topic lists', () => {
+    const mondayTopic = { ...scheduledTopic, assignmentId: 'a-assignment', courseId: 'course-a', courseName: 'Algorithms' };
+    const tuesdayTopic = { ...scheduledTopic, assignmentId: 'b-assignment', courseId: 'course-b', courseName: 'Biology' };
+    const courseCalendar = (
+      courseId: string,
+      courseDay: IsoWeekday,
+      topic: typeof scheduledTopic,
+    ): CalendarView => ({
+      planningStart: '2026-09-07',
+      planningEnd: '2026-09-08',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
+      courseId,
+      visibleWeekdays: [IsoWeekday.Monday, IsoWeekday.Tuesday],
+      planningSummary: { lessonDayCount: 1, plannedTopicCount: 1, unplannedTopicCount: 1 },
+      weeks: [{
+        isoYear: 2026,
+        isoWeek: 37,
+        days: [
+          { ...eligibleDay, date: '2026-09-07', weekday: IsoWeekday.Monday,
+            isCourseDay: courseDay === IsoWeekday.Monday,
+            scheduledTopics: courseDay === IsoWeekday.Monday ? [topic] : [] },
+          { ...eligibleDay, date: '2026-09-08', weekday: IsoWeekday.Tuesday,
+            isCourseDay: courseDay === IsoWeekday.Tuesday,
+            scheduledTopics: courseDay === IsoWeekday.Tuesday ? [topic] : [] },
+        ],
+      }],
+    });
+    vi.spyOn(calendarApi, 'getCalendar')
+      .mockReturnValueOnce(of(courseCalendar('course-a', IsoWeekday.Monday, mondayTopic)))
+      .mockReturnValueOnce(of(courseCalendar('course-b', IsoWeekday.Tuesday, tuesdayTopic)));
+    vi.spyOn(topicApi, 'getTopics')
+      .mockReturnValueOnce(of([toTopic('topic-a', { courseId: 'course-a', heading: 'Arrays', description: '' })]))
+      .mockReturnValueOnce(of([toTopic('topic-b', { courseId: 'course-b', heading: 'Bacteria', description: '' })]));
+    vi.spyOn(topicApi, 'getUnplannedInstances')
+      .mockReturnValueOnce(of([{ id: 'instance-a', topicId: 'topic-a', courseId: 'course-a', heading: 'Arrays', description: '' }]))
+      .mockReturnValueOnce(of([{ id: 'instance-b', topicId: 'topic-b', courseId: 'course-b', heading: 'Bacteria', description: '' }]));
+
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.courses = [
+      { id: 'course-a', schoolYearId: 'school-year', name: 'Algorithms', description: '', weekdays: [IsoWeekday.Monday] },
+      { id: 'course-b', schoolYearId: 'school-year', name: 'Biology', description: '', weekdays: [IsoWeekday.Tuesday] },
+    ];
+    component.selectedSchoolYearId = 'school-year';
+    component.selectedCourseIds = ['course-a', 'course-b'];
+
+    component.reloadCalendar();
+
+    const days = component.calendar!.weeks[0].days;
+    expect(component.topics.map(topic => topic.courseId)).toEqual(['course-a', 'course-b']);
+    expect(component.unplannedTopics.map(topic => topic.courseId)).toEqual(['course-a', 'course-b']);
+    expect(days[0].scheduledTopics.map(topic => topic.courseId)).toEqual(['course-a']);
+    expect(days[1].scheduledTopics.map(topic => topic.courseId)).toEqual(['course-b']);
+    expect(component.calendar!.planningSummary).toEqual({
+      lessonDayCount: 2,
+      plannedTopicCount: 2,
+      unplannedTopicCount: 2,
+    });
+    expect(component.canDropOnDay(days[0], 'course-a')).toBe(true);
+    expect(component.canDropOnDay(days[0], 'course-b')).toBe(false);
+    expect(component.canDropOnDay(days[1], 'course-a')).toBe(false);
+    expect(component.canDropOnDay(days[1], 'course-b')).toBe(true);
+  });
+
+  it('keeps edits and placements in the topic owner course in a combined view', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseIds = ['course-a', 'course-b'];
+    component.topicCourseId = 'course-b';
+    component.editTopic(toTopic('topic-a', {
+      courseId: 'course-a',
+      heading: 'Arrays',
+      description: 'Old description',
+    }));
+    component.topicDraft.description = 'Updated description';
+
+    component.saveTopic();
+    component.placeTopic({
+      id: 'instance-a',
+      topicId: 'topic-a',
+      courseId: 'course-a',
+      heading: 'Arrays',
+      description: '',
+    }, '2026-09-07');
+
+    expect(topicApi.updateTopic).toHaveBeenCalledWith('topic-a', {
+      courseId: 'course-a',
+      heading: 'Arrays',
+      description: 'Updated description',
+    });
+    expect(planningApi.place).toHaveBeenCalledWith({
+      topicInstanceId: 'instance-a',
+      courseId: 'course-a',
+      date: '2026-09-07',
+      insertShiftsSchedule: false,
+    });
+  });
+
+  it('replaces a multi-selection and closes the panel when a course name is clicked', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const close = vi.fn();
+    const stopPropagation = vi.fn();
+    component.courses = [
+      { id: 'course-a', schoolYearId: 'school-year', name: 'Algorithms', description: '', weekdays: [IsoWeekday.Monday] },
+      { id: 'course-b', schoolYearId: 'school-year', name: 'Biology', description: '', weekdays: [IsoWeekday.Tuesday] },
+    ];
+    component.selectedCourseIds = ['course-a', 'course-b'];
+
+    component.selectOnlyCourse(
+      'course-b',
+      { close } as unknown as MatSelect,
+      { stopPropagation } as unknown as MouseEvent,
+    );
+
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(component.selectedCourseIds).toEqual(['course-b']);
+    expect(component.topicCourseId).toBe('course-b');
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it('renders date-only calendar values without a timezone day shift', () => {

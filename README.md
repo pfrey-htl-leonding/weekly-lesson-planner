@@ -52,7 +52,7 @@ See [stack/README.md](./stack/README.md) for health checks, ports, database back
 4. Select the course in **Course view**, then add its topics in **Topic management**. Topic headings that start with a number followed by a space are sorted numerically before other topics—for example, `2 Arrays` comes before `10 Trees`.
 5. In **Data import/export**, import or export courses or topics as semicolon-separated CSV (`name;optional description`). Topic import/export requires exactly one selected course.
 
-**Insert shifts schedule** pushes an occupied topic and the following topics forward when you insert another topic; without it, the occupied topic becomes unplanned. **Delete shifts schedule** pulls following topics backward to close a gap after removal; without it, the gap remains.
+**Edit shifts schedule** controls both kinds of schedule adjustment. When enabled, inserting pushes an occupied topic and the following topics forward, while deleting pulls following topics backward to close the gap. When disabled, inserting makes the overwritten topic unplanned and deleting leaves a gap.
 
 ## Organisation 
 

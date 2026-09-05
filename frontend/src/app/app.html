@@ -253,9 +253,8 @@
           <mat-tab label="Options">
             <div class="tab-content form-grid">
               <h3>Schedule changes</h3>
-              <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
-              <mat-checkbox [(ngModel)]="deleteShiftsSchedule">Delete shifts schedule</mat-checkbox>
-              <p class="field-note">These options apply to drops and the accessible placement, movement, and removal buttons.</p>
+              <mat-checkbox [(ngModel)]="editShiftsSchedule">Edit shifts schedule</mat-checkbox>
+              <p class="field-note">When enabled, inserting shifts topics forward and deleting shifts topics backward. This option applies to drops and the accessible placement, movement, and removal buttons.</p>
               @if (config) {
                 <h3>Calendar display</h3>
                 <div class="weekday-group">
@@ -311,12 +310,13 @@
             <mat-form-field><mat-label>School year</mat-label><mat-select [(ngModel)]="selectedSchoolYearId" (selectionChange)="changeSchoolYearView()">@for (schoolYear of schoolYears; track schoolYear.id) { <mat-option [value]="schoolYear.id">{{ schoolYear.name }}</mat-option> }</mat-select></mat-form-field>
             <mat-form-field>
               <mat-label>Course view</mat-label>
-              <mat-select #courseSelect multiple [(ngModel)]="selectedCourseIds" (selectionChange)="changeCourseView()">
+              <mat-select #courseSelect multiple [ngModel]="selectedCourseIds" (selectionChange)="changeCourseSelection($event.value, courseSelect)">
                 <mat-select-trigger>
-                  @if (selectedCourseIds.length === 0) { All topics }
+                  @if (selectedCourseIds.length === 0) { All courses }
                   @else if (selectedCourseIds.length === 1) { {{ courseName(selectedCourseIds[0]) }} }
                   @else { {{ selectedCourseIds.length }} courses }
                 </mat-select-trigger>
+                <mat-option [value]="allCoursesOptionValue">All courses</mat-option>
                 @for (course of coursesForSelectedSchoolYear(); track course.id) {
                   <mat-option [value]="course.id">
                     <span class="course-option-name" (click)="selectOnlyCourse(course.id, courseSelect, $event)">{{ course.name }}</span>
@@ -326,14 +326,13 @@
             </mat-form-field>
           </div>
           <div class="planning-options" aria-label="Schedule shift options">
-            <mat-checkbox [(ngModel)]="insertShiftsSchedule">Insert shifts schedule</mat-checkbox>
-            <mat-checkbox [(ngModel)]="deleteShiftsSchedule">Delete shifts schedule</mat-checkbox>
+            <mat-checkbox [(ngModel)]="editShiftsSchedule">Edit shifts schedule</mat-checkbox>
           </div>
         </div>
       </div>
 
       @if (selectedCourseIds.length === 0) {
-        <p class="planning-hint"><mat-icon aria-hidden="true">info</mat-icon>Select one or more courses to place, move, copy, or remove topics. All topics remains a read-only aggregate view.</p>
+        <p class="planning-hint"><mat-icon aria-hidden="true">info</mat-icon>Select one or more courses to place, move, copy, or remove topics. All courses remains a read-only aggregate view.</p>
       } @else {
         <p class="planning-hint"><mat-icon aria-hidden="true">drag_indicator</mat-icon>Topics from the selected courses are combined here. Every placement, move, and removal stays within its topic’s course.</p>
       }

@@ -78,6 +78,7 @@ export class App implements OnInit {
   readonly weekdays = Object.values(IsoWeekday).filter((value): value is IsoWeekday => typeof value === 'number');
   readonly markerTypes = GlobalDayMarkerType;
   readonly states = EffectiveDayState;
+  readonly allCoursesOptionValue = '__all_courses__';
 
   config: AppConfig | null = null;
   schoolYears: SchoolYear[] = [];
@@ -113,8 +114,7 @@ export class App implements OnInit {
   placementDate = '';
   multiplePlanningFrom = '';
   multiplePlanningUntil = '';
-  insertShiftsSchedule = false;
-  deleteShiftsSchedule = false;
+  editShiftsSchedule = false;
   dataTransferText = '';
   dataTransferKind: 'topics' | 'courses' = 'topics';
   busy = false;
@@ -227,6 +227,13 @@ export class App implements OnInit {
     this.clearExam();
     this.clearTopic();
     this.reloadCalendar();
+  }
+
+  changeCourseSelection(courseIds: string[], select: MatSelect): void {
+    const allCoursesSelected = courseIds.includes(this.allCoursesOptionValue);
+    this.selectedCourseIds = allCoursesSelected ? [] : courseIds;
+    this.changeCourseView();
+    if (allCoursesSelected) select.close();
   }
 
   selectOnlyCourse(courseId: string, select: MatSelect, event: MouseEvent): void {
@@ -637,7 +644,7 @@ export class App implements OnInit {
       topicInstanceId: instance.id,
       courseId: instance.courseId,
       date,
-      insertShiftsSchedule: this.insertShiftsSchedule,
+      insertShiftsSchedule: this.editShiftsSchedule,
     }), `Placed “${instance.heading}”`);
   }
 
@@ -645,8 +652,8 @@ export class App implements OnInit {
     topic: ScheduledTopic,
     destinationDate: string,
     options = {
-      deleteShiftsSchedule: this.deleteShiftsSchedule,
-      insertShiftsSchedule: this.insertShiftsSchedule,
+      deleteShiftsSchedule: this.editShiftsSchedule,
+      insertShiftsSchedule: this.editShiftsSchedule,
     },
   ): void {
     this.runPlanningCommand(this.planningApi.drag({
@@ -660,7 +667,7 @@ export class App implements OnInit {
   removeScheduledTopic(topic: ScheduledTopic): void {
     this.runPlanningCommand(this.planningApi.remove({
       assignmentId: topic.assignmentId,
-      deleteShiftsSchedule: this.deleteShiftsSchedule,
+      deleteShiftsSchedule: this.editShiftsSchedule,
     }), `Removed “${topic.heading}”`);
   }
 

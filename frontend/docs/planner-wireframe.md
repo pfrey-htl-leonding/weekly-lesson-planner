@@ -4,7 +4,7 @@ This Phase 0 wireframe records the agreed layout and interaction boundaries. It 
 
 ```text
 ┌──────────────────────────────── Weekly Lesson Planner ────────────────────────────────┐
-│ Course [ CABS ▾ ]       ☐ Insert shifts schedule   ☐ Delete shifts schedule  [Export] │
+│ Course [ CABS ▾ ]                  ☐ Edit shifts schedule                  [Export] │
 ├───────────────────────────────┬────────────────────────────────────────────────────────┤
 │ Unplanned topics              │ ISO week │ Mon │ Tue │ Wed │ Thu │ Fri                 │
 │ Search [________________]     │ W36      │ ... │ ... │ ... │ ... │ ...                 │
@@ -24,11 +24,10 @@ This Phase 0 wireframe records the agreed layout and interaction boundaries. It 
 - No API call and no shifted-schedule preview occurs before drop.
 - A cancelled or invalid drop makes no request.
 - A valid list-to-calendar drop sends one placement command.
-- A valid calendar-to-calendar drop sends one atomic drag command carrying both checkbox values.
+- A valid calendar-to-calendar drop sends one atomic drag command with both shift modes set from the combined checkbox.
 
 ## Fixed-day capacity feedback
 
 - Adding a global holiday/event shifts every affected course as one atomic backend command.
 - Adding an exam shifts only the selected course.
 - If capacity is insufficient, show the backend conflict and keep the complete schedule unchanged.
-

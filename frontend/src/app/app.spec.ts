@@ -325,6 +325,25 @@ describe('App', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it('returns to the read-only All courses view from the course menu', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const close = vi.fn();
+    component.selectedCourseIds = ['course-a', 'course-b'];
+    component.topicCourseId = 'course-a';
+    component.selectedSchoolYearId = 'school-year';
+    vi.spyOn(component, 'reloadCalendar').mockImplementation(() => undefined);
+
+    component.changeCourseSelection(
+      [component.allCoursesOptionValue],
+      { close } as unknown as MatSelect,
+    );
+
+    expect(component.selectedCourseIds).toEqual([]);
+    expect(component.topicCourseId).toBe('');
+    expect(close).toHaveBeenCalledOnce();
+  });
+
   it('renders date-only calendar values without a timezone day shift', () => {
     const fixture = TestBed.createComponent(App);
 
@@ -439,12 +458,12 @@ describe('App', () => {
     expect(planningApi.drag).not.toHaveBeenCalled();
   });
 
-  it('places an unplanned topic exactly once on drop with the insertion option', () => {
+  it('places an unplanned topic exactly once on drop with schedule editing enabled', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     const instance = { id: 'instance', topicId: 'topic', courseId: 'course', heading: 'Trees', description: '' };
     component.selectedCourseId = 'course';
-    component.insertShiftsSchedule = true;
+    component.editShiftsSchedule = true;
 
     component.onDayDrop({
       item: { data: component.unplannedDragData(instance) },
@@ -459,12 +478,11 @@ describe('App', () => {
     });
   });
 
-  it('sends one atomic drag command on drop with both checkbox values', () => {
+  it('enables both shift modes in one atomic drag command', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     component.selectedCourseId = 'course';
-    component.insertShiftsSchedule = true;
-    component.deleteShiftsSchedule = true;
+    component.editShiftsSchedule = true;
 
     component.onDayDrop({
       item: { data: component.scheduledDragData(scheduledTopic, '2026-09-01') },
@@ -496,11 +514,11 @@ describe('App', () => {
     expect(planningApi.drag).not.toHaveBeenCalled();
   });
 
-  it('removes a scheduled topic dropped into the topic list using the deletion option', () => {
+  it('removes a scheduled topic with deletion shifting when schedule editing is enabled', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     component.selectedCourseId = 'course';
-    component.deleteShiftsSchedule = true;
+    component.editShiftsSchedule = true;
 
     component.onTopicListDrop({
       item: { data: component.scheduledDragData(scheduledTopic, '2026-09-01') },
@@ -662,12 +680,11 @@ describe('App', () => {
       .toEqual({ 'border-left-color': '#ffff00' });
   });
 
-  it('shifts forward while preserving the source gap regardless of checkbox values', () => {
+  it('shifts forward while preserving the source gap regardless of schedule editing', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     component.selectedCourseId = 'course';
-    component.deleteShiftsSchedule = true;
-    component.insertShiftsSchedule = false;
+    component.editShiftsSchedule = true;
     component.calendar = {
       planningStart: '2026-09-07',
       planningEnd: '2026-09-21',
@@ -698,7 +715,7 @@ describe('App', () => {
     });
   });
 
-  it('returns the course view to All topics when switching school year', () => {
+  it('returns the course view to All courses when switching school year', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     component.selectedCourseId = 'course';

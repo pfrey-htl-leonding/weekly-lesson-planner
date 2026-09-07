@@ -35,6 +35,19 @@ export interface MultipleTopicPlanningResult {
   lastAffectedDate: string | null;
 }
 
+export interface ImportCourseScheduleItem {
+  course: string;
+  date: string;
+  topic: string;
+  description: string;
+}
+
+export interface ImportCourseScheduleResult {
+  importedAssignmentCount: number;
+  unchangedAssignmentCount: number;
+  createdTopicCount: number;
+}
+
 export interface MoveCourseExamResult {
   exam: CourseExam;
   swappedTopic: AssignmentMove | null;
@@ -103,6 +116,10 @@ export class PlanningApi {
 
   removeAll(command: MultipleTopicPlanningCommand): Observable<MultipleTopicPlanningResult> {
     return this.api.post('/api/planning/remove-all', command);
+  }
+
+  importCourseSchedule(courseId: string, items: ImportCourseScheduleItem[]): Observable<ImportCourseScheduleResult> {
+    return this.api.post('/api/planning/import-course-schedule', { courseId, items });
   }
 
   moveExam(examId: string, direction: -1 | 1): Observable<MoveCourseExamResult> {

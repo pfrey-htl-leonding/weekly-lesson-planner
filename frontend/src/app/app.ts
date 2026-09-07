@@ -14,7 +14,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { forkJoin, map, Observable, of } from 'rxjs';
+import { forkJoin, map, Observable, of, switchMap } from 'rxjs';
 import {
   AppConfig,
   CalendarApi,
@@ -39,8 +39,12 @@ import {
   PlanningImpact,
 } from './core/api/planning-api';
 import {
+  parseCourseScheduleCsv,
   parseNameDescriptionCsv,
+  parseSchoolYearCsv,
+  writeCourseScheduleCsv,
   writeNameDescriptionCsv,
+  writeSchoolYearCsv,
 } from './core/data/name-description-csv';
 
 type PlannerDragData =
@@ -116,7 +120,7 @@ export class App implements OnInit {
   multiplePlanningUntil = '';
   editShiftsSchedule = false;
   dataTransferText = '';
-  dataTransferKind: 'topics' | 'courses' = 'topics';
+  dataTransferKind: 'topics' | 'courses' | 'schoolYear' | 'courseSchedule' = 'courseSchedule';
   busy = false;
   message = '';
   error = '';
@@ -770,8 +774,54 @@ export class App implements OnInit {
   }
 
   exportData(): void {
-    if (this.dataTransferKind === 'topics' && !this.selectedCourseId) {
-      this.fail('Select a course before exporting topics.');
+    if ((this.dataTransferKind === 'topics' || this.dataTransferKind === 'courseSchedule') && !this.selectedCourseId) {
+      this.fail(`Select exactly one course before exporting ${this.dataTransferKind === 'topics' ? 'topics' : 'a course schedule'}.`);
+      return;
+    }
+
+    if (this.dataTransferKind === 'schoolYear') {
+      const schoolYear = this.selectedSchoolYear();
+      if (!schoolYear) {
+        this.fail('Select a school year before exporting it.');
+        return;
+      }
+      const exportedMarkers = this.markers
+        .filter(marker => marker.schoolYearId === schoolYear.id)
+        .sort((left, right) => left.date.localeCompare(right.date));
+      this.dataTransferText = writeSchoolYearCsv({
+        name: schoolYear.name,
+        planningStart: schoolYear.planningStart,
+        planningEnd: schoolYear.planningEnd,
+        markers: exportedMarkers.map(marker => ({
+          date: marker.date,
+          type: marker.type === GlobalDayMarkerType.Holiday ? 'Holiday' : 'Event',
+          label: marker.label ?? '',
+        })),
+      });
+      this.succeed(`Exported school year “${schoolYear.name}” with ${exportedMarkers.length} holiday/event marker(s).`);
+      return;
+    }
+
+    if (this.dataTransferKind === 'courseSchedule') {
+      const course = this.courses.find(item => item.id === this.selectedCourseId);
+      if (!course) {
+        this.fail('The selected course is no longer available. Refresh and select it again.');
+        return;
+      }
+      const calendar = this.courseCalendars[course.id] ?? this.calendar;
+      const records = (calendar?.weeks ?? [])
+        .flatMap(week => week.days)
+        .flatMap(day => day.scheduledTopics
+          .filter(topic => topic.courseId === course.id)
+          .map(topic => ({
+            course: course.name,
+            date: day.date,
+            topic: topic.heading,
+            description: topic.description,
+          })))
+        .sort((left, right) => left.date.localeCompare(right.date));
+      this.dataTransferText = writeCourseScheduleCsv(records);
+      this.succeed(`Exported ${records.length} planned topic(s) for “${course.name}”.`);
       return;
     }
 
@@ -783,6 +833,15 @@ export class App implements OnInit {
   }
 
   importData(): void {
+    if (this.dataTransferKind === 'schoolYear') {
+      this.importSchoolYearData();
+      return;
+    }
+    if (this.dataTransferKind === 'courseSchedule') {
+      this.importCourseScheduleData();
+      return;
+    }
+
     if (this.dataTransferKind === 'topics' && !this.selectedCourseId) {
       this.fail('Select a course before importing topics.');
       return;
@@ -841,7 +900,7 @@ export class App implements OnInit {
             this.normalizeName(course.name) === this.normalizeName(record.name));
           if (existing) {
             updatedCount += 1;
-          return this.api.updateCourse(existing.id, {
+            return this.api.updateCourse(existing.id, {
               schoolYearId: existing.schoolYearId,
               name: record.name,
               description: record.description,
@@ -874,6 +933,90 @@ export class App implements OnInit {
         } else {
           this.reloadAll();
         }
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  private importSchoolYearData(): void {
+    let imported;
+    try {
+      imported = parseSchoolYearCsv(this.dataTransferText);
+    } catch (error) {
+      this.fail(error instanceof Error ? error.message : 'Invalid school-year CSV data.');
+      return;
+    }
+
+    const existingSchoolYear = this.schoolYears.find(item =>
+      this.normalizeName(item.name) === this.normalizeName(imported.name));
+    const schoolYearRequest = existingSchoolYear
+      ? this.api.updateSchoolYear(existingSchoolYear.id, {
+          name: imported.name,
+          planningStart: imported.planningStart,
+          planningEnd: imported.planningEnd,
+        })
+      : this.api.createSchoolYear({
+          name: imported.name,
+          planningStart: imported.planningStart,
+          planningEnd: imported.planningEnd,
+        });
+
+    this.busy = true;
+    schoolYearRequest.pipe(
+      switchMap(schoolYear => this.api.getMarkers(schoolYear.id).pipe(
+        switchMap(existingMarkers => {
+          const requests = imported.markers.map(marker => {
+            const command = {
+              schoolYearId: schoolYear.id,
+              date: marker.date,
+              type: marker.type === 'Holiday' ? GlobalDayMarkerType.Holiday : GlobalDayMarkerType.Event,
+              label: marker.label || null,
+            };
+            const existing = existingMarkers.find(item => item.date === marker.date);
+            return existing ? this.api.updateMarker(existing.id, command) : this.api.createMarker(command);
+          });
+          return (requests.length > 0 ? forkJoin(requests) : of([])).pipe(map(() => schoolYear));
+        }),
+      )),
+    ).subscribe({
+      next: schoolYear => {
+        this.selectedSchoolYearId = schoolYear.id;
+        this.selectedCourseIds = [];
+        this.succeed(
+          `Imported school year “${schoolYear.name}” with ${imported.markers.length} holiday/event marker(s).`,
+        );
+        this.reloadAll();
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  private importCourseScheduleData(): void {
+    if (!this.selectedCourseId) {
+      this.fail('Select exactly one course before importing a course schedule.');
+      return;
+    }
+
+    let records;
+    try {
+      records = parseCourseScheduleCsv(this.dataTransferText);
+    } catch (error) {
+      this.fail(error instanceof Error ? error.message : 'Invalid course-schedule CSV data.');
+      return;
+    }
+    if (records.length === 0) {
+      this.fail('The course-schedule CSV contains no planned topics.');
+      return;
+    }
+
+    this.busy = true;
+    this.planningApi.importCourseSchedule(this.selectedCourseId, records).subscribe({
+      next: result => {
+        this.succeed(
+          `Imported ${result.importedAssignmentCount} planned topic(s); ` +
+          `${result.unchangedAssignmentCount} already matched the schedule.`,
+        );
+        this.reloadCalendar();
       },
       error: error => this.handleError(error),
     });

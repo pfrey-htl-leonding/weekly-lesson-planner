@@ -22,7 +22,7 @@ mat-card-content { padding-top: 1rem; }
 .date-range-fields mat-form-field { min-width: 0; }
 .marker-actions { flex-wrap: wrap; }
 .data-transfer-field textarea { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: .78rem; line-height: 1.2rem; resize: vertical; }
-.data-transfer-kind { display: flex; gap: 1rem; }
+.data-transfer-kind { display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
 .field-note { color: var(--mat-sys-on-surface-variant); font-size: .75rem; margin: 0; }
 .resource-list { border-top: 1px solid var(--mat-sys-outline-variant); display: grid; margin-top: .5rem; padding-top: .5rem; }
 .resource-list > div { align-items: center; display: flex; min-width: 0; }

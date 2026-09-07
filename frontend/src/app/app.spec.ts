@@ -2,7 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { MatSelect } from '@angular/material/select';
 import { Observable, of, Subject } from 'rxjs';
 import { App } from './app';
-import { CalendarApi, CalendarView, EffectiveDayState, IsoWeekday } from './core/api/calendar-api';
+import {
+  CalendarApi,
+  CalendarView,
+  EffectiveDayState,
+  GlobalDayMarkerType,
+  IsoWeekday,
+} from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
 import { PlanningApi, PlanningImpact } from './core/api/planning-api';
 
@@ -65,6 +71,11 @@ const planningApi = {
     affectedTopicCount: 3,
     firstAffectedDate: '2026-09-07',
     lastAffectedDate: '2026-09-21',
+  })),
+  importCourseSchedule: vi.fn(() => of({
+    importedAssignmentCount: 1,
+    unchangedAssignmentCount: 0,
+    createdTopicCount: 1,
   })),
   moveExam: vi.fn(() => of({
     exam: {
@@ -404,6 +415,86 @@ describe('App', () => {
       description: 'Updated description',
     });
     expect(topicApi.createTopic).not.toHaveBeenCalled();
+  });
+
+  it('exports only scheduled topics with course, date, and topic', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.courses = [{
+      id: 'course',
+      schoolYearId: 'school-year',
+      name: 'Algorithms',
+      description: '',
+      weekdays: [IsoWeekday.Monday],
+    }];
+    component.topics = [toTopic('unplanned', {
+      courseId: 'course',
+      heading: 'Not scheduled',
+      description: '',
+    })];
+    component.courseCalendars['course'] = {
+      planningStart: '2026-09-07',
+      planningEnd: '2026-09-07',
+      schoolYearId: 'school-year',
+      schoolYearName: '2026/27',
+      courseId: 'course',
+      visibleWeekdays: [IsoWeekday.Monday],
+      planningSummary: { lessonDayCount: 1, plannedTopicCount: 1, unplannedTopicCount: 1 },
+      weeks: [{
+        isoYear: 2026,
+        isoWeek: 37,
+        days: [{ ...eligibleDay, scheduledTopics: [{ ...scheduledTopic, courseName: 'Algorithms' }] }],
+      }],
+    };
+    component.dataTransferKind = 'courseSchedule';
+
+    component.exportData();
+
+    expect(component.dataTransferText).toBe('Course;Date;Topic;Description\nAlgorithms;2026-09-07;Trees;');
+    expect(component.dataTransferText).not.toContain('Not scheduled');
+  });
+
+  it('exports the selected school-year range and its holiday/event markers', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedSchoolYearId = 'school-year';
+    component.schoolYears = [{
+      id: 'school-year',
+      name: '2026/27',
+      planningStart: '2026-09-01',
+      planningEnd: '2027-06-30',
+    }];
+    component.markers = [{
+      id: 'holiday',
+      schoolYearId: 'school-year',
+      date: '2026-10-26',
+      type: GlobalDayMarkerType.Holiday,
+      label: 'National holiday',
+    }];
+    component.dataTransferKind = 'schoolYear';
+
+    component.exportData();
+
+    expect(component.dataTransferText).toBe([
+      'School year;Planning start;Planning end;Date;Type;Label',
+      '2026/27;2026-09-01;2027-06-30;;;',
+      '2026/27;2026-09-01;2027-06-30;2026-10-26;Holiday;National holiday',
+    ].join('\n'));
+  });
+
+  it('sends imported planned topics to the transactional schedule endpoint', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseId = 'course';
+    component.dataTransferKind = 'courseSchedule';
+    component.dataTransferText = 'Course;Date;Topic;Description\nAlgorithms;2026-09-07;Trees;Balanced trees';
+
+    component.importData();
+
+    expect(planningApi.importCourseSchedule).toHaveBeenCalledWith('course', [
+      { course: 'Algorithms', date: '2026-09-07', topic: 'Trees', description: 'Balanced trees' },
+    ]);
   });
 
   it('reloads the calendar after editing a shared topic definition', () => {

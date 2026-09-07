@@ -29,6 +29,21 @@ public sealed record MultipleTopicPlanningResultDto(
     DateOnly? FirstAffectedDate,
     DateOnly? LastAffectedDate);
 
+public sealed record ImportCourseScheduleItem(
+    string Course,
+    DateOnly Date,
+    string Topic,
+    string Description);
+
+public sealed record ImportCourseScheduleCommand(
+    Guid CourseId,
+    IReadOnlyList<ImportCourseScheduleItem> Items);
+
+public sealed record ImportCourseScheduleResultDto(
+    int ImportedAssignmentCount,
+    int UnchangedAssignmentCount,
+    int CreatedTopicCount);
+
 public sealed record MoveCourseExamCommand(
     Guid ExamId,
     int Direction);

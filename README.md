@@ -50,7 +50,7 @@ See [stack/README.md](./stack/README.md) for health checks, ports, database back
 2. In **Courses**, add a course for that school year and select its teaching days.
 3. In **Global holiday**, add holidays and events for the school year. Select one course in **Course view** and use **Course exam** to add its exams.
 4. Select the course in **Course view**, then add its topics in **Topic management**. Topic headings that start with a number followed by a space are sorted numerically before other topics—for example, `2 Arrays` comes before `10 Trees`.
-5. In **Data import/export**, import or export courses or topics as semicolon-separated CSV (`name;optional description`). Topic import/export requires exactly one selected course.
+5. In **Data import/export**, import or export semicolon-separated CSV. A school-year export contains its date range and holidays/events. A planned-course-topics export contains only scheduled topics, with course, date, topic, and description; exactly one course must be selected. The original course and topic catalog formats (`name;optional description`) remain available.
 
 **Edit shifts schedule** controls both kinds of schedule adjustment. When enabled, inserting pushes an occupied topic and the following topics forward, while deleting pulls following topics backward to close the gap. When disabled, inserting makes the overwritten topic unplanned and deleting leaves a gap.
 

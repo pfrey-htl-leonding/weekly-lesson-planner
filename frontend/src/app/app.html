@@ -277,17 +277,23 @@
             <div class="tab-content form-grid">
               <mat-form-field class="data-transfer-field">
                 <mat-label>CSV data</mat-label>
-                <textarea matInput [(ngModel)]="dataTransferText" rows="12" placeholder="Name;Optional description"></textarea>
-                <mat-hint>One record per line: name;optional description. Matching names are updated.</mat-hint>
+                <textarea matInput [(ngModel)]="dataTransferText" rows="12" placeholder="Export data appears here; paste compatible CSV here to import."></textarea>
+                <mat-hint>Semicolon-separated CSV. Export a sample to see the header required by the selected data type.</mat-hint>
               </mat-form-field>
 
               <mat-radio-group class="data-transfer-kind" [(ngModel)]="dataTransferKind" aria-label="Data type">
-                <mat-radio-button value="topics">Topics</mat-radio-button>
-                <mat-radio-button value="courses">Courses</mat-radio-button>
+                <mat-radio-button value="schoolYear">School year</mat-radio-button>
+                <mat-radio-button value="courseSchedule">Planned course topics</mat-radio-button>
+                <mat-radio-button value="topics">Topic catalog</mat-radio-button>
+                <mat-radio-button value="courses">Course catalog</mat-radio-button>
               </mat-radio-group>
 
-              @if (dataTransferKind === 'topics') {
-                <p class="field-note">Topic import/export is available when exactly one course is selected in Course view.</p>
+              @if (dataTransferKind === 'courseSchedule') {
+                <p class="field-note">Exports only planned topics for exactly one selected course, with course, date, topic, and description.</p>
+              } @else if (dataTransferKind === 'schoolYear') {
+                <p class="field-note">Exports the selected school year's date range and all its holidays/events.</p>
+              } @else if (dataTransferKind === 'topics') {
+                <p class="field-note">Topic-catalog import/export is available when exactly one course is selected in Course view.</p>
               } @else {
                 <p class="field-note">Courses apply to {{ selectedSchoolYear()?.name || 'the selected school year' }} and use the visible weekdays configured in Options.</p>
               }

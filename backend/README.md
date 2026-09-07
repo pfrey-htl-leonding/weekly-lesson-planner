@@ -49,3 +49,9 @@ Marker and exam writes go through `IPlanningService`. Invalid requests use HTTP 
 - `POST /api/topic-instances/{scheduledId}/copy`
 
 Creating a definition creates its first unplanned instance. Planned/unplanned status is derived only from assignment presence. Shared definitions cannot be deleted while any instance is scheduled, and scheduled instances cannot be deleted through the unplanned-instance endpoint.
+
+## Schedule import
+
+- `POST /api/planning/import-course-schedule` imports course/date/topic/description rows into one selected course.
+
+The import validates the course name, planning range, teaching weekdays, fixed days, and occupied dates before writing. It reuses matching topic definitions and unplanned instances, creates additional instances for repeated topics, and treats already-matching rows as unchanged.

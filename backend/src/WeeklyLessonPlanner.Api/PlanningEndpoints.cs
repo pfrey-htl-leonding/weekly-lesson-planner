@@ -41,6 +41,11 @@ public static class PlanningEndpoints
             IPlanningService service,
             CancellationToken token) => Results.Ok(await service.RemoveAllTopicsAsync(command, token)));
 
+        planning.MapPost("/import-course-schedule", async (
+            ImportCourseScheduleCommand command,
+            IPlanningService service,
+            CancellationToken token) => Results.Ok(await service.ImportCourseScheduleAsync(command, token)));
+
         planning.MapPost("/move-exam", async (
             MoveCourseExamCommand command,
             IPlanningService service,

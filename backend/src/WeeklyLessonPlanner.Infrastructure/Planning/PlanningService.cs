@@ -213,6 +213,172 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
             assignments.Count > 0 ? assignments[^1].Date : null);
     }
 
+    public async Task<ImportCourseScheduleResultDto> ImportCourseScheduleAsync(
+        ImportCourseScheduleCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (command.Items is null || command.Items.Count == 0)
+        {
+            throw new ArgumentException("The course schedule contains no planned topics.");
+        }
+
+        var duplicateDate = command.Items
+            .GroupBy(item => item.Date)
+            .FirstOrDefault(group => group.Count() > 1)?.Key;
+        if (duplicateDate.HasValue)
+        {
+            throw new ArgumentException($"The course schedule contains date {duplicateDate:yyyy-MM-dd} more than once.");
+        }
+
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var course = await dbContext.Courses
+            .Include(item => item.SchoolYear)
+            .Include(item => item.Weekdays)
+            .Include(item => item.Topics)
+            .ThenInclude(item => item.Instances)
+            .ThenInclude(item => item.Assignment)
+            .SingleOrDefaultAsync(item => item.Id == command.CourseId, cancellationToken)
+            ?? throw new KeyNotFoundException("Course not found.");
+        var weekdays = course.Weekdays.Select(item => item.Weekday).ToHashSet();
+        var importedDates = command.Items.Select(item => item.Date).ToHashSet();
+        var fixedDates = (await dbContext.GlobalDayMarkers.AsNoTracking()
+                .Where(item => item.SchoolYearId == course.SchoolYearId && importedDates.Contains(item.Date))
+                .Select(item => item.Date)
+                .ToListAsync(cancellationToken))
+            .Concat(await dbContext.CourseExams.AsNoTracking()
+                .Where(item => item.CourseId == course.Id && importedDates.Contains(item.Date))
+                .Select(item => item.Date)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var descriptionsByTopic = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in command.Items)
+        {
+            if (!string.Equals(item.Course?.Trim(), course.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new PlanningConflictException(
+                    $"Imported course '{item.Course?.Trim()}' does not match selected course '{course.Name}'.");
+            }
+            if (string.IsNullOrWhiteSpace(item.Topic) || item.Topic.Trim().Length > 200)
+            {
+                throw new ArgumentException("Every imported topic is required and must not exceed 200 characters.");
+            }
+            if (item.Description?.Length > 4000)
+            {
+                throw new ArgumentException("Every imported topic description must not exceed 4000 characters.");
+            }
+            var heading = item.Topic.Trim();
+            var description = item.Description?.Trim() ?? string.Empty;
+            if (descriptionsByTopic.TryGetValue(heading, out var priorDescription) &&
+                !string.Equals(priorDescription, description, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"Imported topic '{heading}' has more than one description.");
+            }
+            descriptionsByTopic[heading] = description;
+            EnsureDateInRange(item.Date, course.SchoolYear);
+            if (!weekdays.Contains(ToIsoWeekday(item.Date)))
+            {
+                throw new PlanningConflictException(
+                    $"{item.Date:yyyy-MM-dd} is not a teaching day for course '{course.Name}'.");
+            }
+            if (fixedDates.Contains(item.Date))
+            {
+                throw new PlanningConflictException(
+                    $"{item.Date:yyyy-MM-dd} is blocked by a holiday, event, or exam.");
+            }
+        }
+
+        var existingAssignments = await dbContext.TopicAssignments
+            .Include(item => item.TopicInstance)
+            .ThenInclude(item => item.Topic)
+            .Where(item => item.CourseId == course.Id && importedDates.Contains(item.Date))
+            .ToDictionaryAsync(item => item.Date, cancellationToken);
+        var unchangedCount = 0;
+        var importedCount = 0;
+        var createdTopicCount = 0;
+
+        foreach (var item in command.Items.OrderBy(item => item.Date))
+        {
+            var heading = item.Topic.Trim();
+            var description = item.Description?.Trim() ?? string.Empty;
+            if (existingAssignments.TryGetValue(item.Date, out var existingAssignment))
+            {
+                if (!string.Equals(
+                        existingAssignment.TopicInstance.Topic.Heading,
+                        heading,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new PlanningConflictException(
+                        $"{item.Date:yyyy-MM-dd} already contains topic '{existingAssignment.TopicInstance.Topic.Heading}'.");
+                }
+                existingAssignment.TopicInstance.Topic.Description = description;
+                unchangedCount += 1;
+                continue;
+            }
+
+            var matchingTopics = course.Topics
+                .Where(topic => string.Equals(topic.Heading, heading, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matchingTopics.Length > 1)
+            {
+                throw new PlanningConflictException(
+                    $"More than one existing topic is named '{heading}'. Rename one before importing.");
+            }
+
+            var topic = matchingTopics.SingleOrDefault();
+            if (topic is null)
+            {
+                topic = new Topic
+                {
+                    Id = Guid.NewGuid(),
+                    CourseId = course.Id,
+                    Heading = heading,
+                    Description = description,
+                    Course = course
+                };
+                course.Topics.Add(topic);
+                dbContext.Entry(topic).State = EntityState.Added;
+                createdTopicCount += 1;
+            }
+            else
+            {
+                topic.Description = description;
+            }
+
+            var instance = topic.Instances.FirstOrDefault(candidate => candidate.Assignment is null);
+            if (instance is null)
+            {
+                instance = new TopicInstance
+                {
+                    Id = Guid.NewGuid(),
+                    TopicId = topic.Id,
+                    CourseId = course.Id,
+                    Topic = topic
+                };
+                topic.Instances.Add(instance);
+                dbContext.Entry(instance).State = EntityState.Added;
+            }
+
+            instance.Assignment = new TopicAssignment
+            {
+                Id = Guid.NewGuid(),
+                TopicInstanceId = instance.Id,
+                CourseId = course.Id,
+                Date = item.Date,
+                TopicInstance = instance
+            };
+            dbContext.Entry(instance.Assignment).State = EntityState.Added;
+            importedCount += 1;
+        }
+
+        await SaveConflictSafeAsync(
+            "The course schedule changed concurrently. Refresh it and try the import again.",
+            cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return new ImportCourseScheduleResultDto(importedCount, unchangedCount, createdTopicCount);
+    }
+
     public async Task<CourseRolloverResultDto> RollOverCourseAsync(
         CourseRolloverCommand command,
         CancellationToken cancellationToken = default)

@@ -25,6 +25,9 @@ public interface IPlanningService
     Task<MultipleTopicPlanningResultDto> RemoveAllTopicsAsync(
         MultipleTopicPlanningCommand command,
         CancellationToken cancellationToken = default);
+    Task<ImportCourseScheduleResultDto> ImportCourseScheduleAsync(
+        ImportCourseScheduleCommand command,
+        CancellationToken cancellationToken = default);
     Task<CourseRolloverResultDto> RollOverCourseAsync(
         CourseRolloverCommand command,
         CancellationToken cancellationToken = default);

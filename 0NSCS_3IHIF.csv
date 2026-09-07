@@ -1,0 +1,19 @@
+Course;Date;Topic;Description
+0NSCS_3IHIF;2026-09-23;10 Recap 3. Jhg: Structure of the Internet;"TODO: Switch to 5 layer model of Comer e.a. Interpret tracepath www.globaltimes.cn. Public IPs, Private IPs. (P)NAT. Analogy: Private Home Address = Private IP, Bus stop = Public exit IP of ISP. On your ticket: Bus stop -> Beijing. So in Beijing, you still show your ticket ""Meixnerkreuzung -> Beijing""!"
+0NSCS_3IHIF;2026-09-30;20 Recap 3. Jhg: DNS;Interpret dig www.orf.at. Record types for name resolution in DNS. Hierarchical structure. DNS providers.
+0NSCS_3IHIF;2026-10-07;30 Recap 3. Jhg: Layer 7 HTTP;The HTTP Protocol in more detail. Wireshark. curl or browse to http://httpbingo.org/. Show in Wireshark what's going on.
+0NSCS_3IHIF;2026-10-14;40 Routing Protocols;How do routers find their way? (RIP, OSPF) Routing as a business. The backbone of the Internet.
+0NSCS_3IHIF;2026-10-21;60 My Own Service;Intro to writing a small server in C#. Tools in C# for TCP connections. Localhost revisited. Define a appl. protocol over TCP and UDP. Maybe control something? Specify what client and server should do.
+0NSCS_3IHIF;2026-11-04;70 NMAP Intro / My Own Service cont'd;Deploy MyOwnService on proxmox. React on 2 high ports with a simple protocol. Other students need to find out what is there => nmap. Scan and use the unknown server. Portscanning. Idea of nmap.
+0NSCS_3IHIF;2026-11-11;100 DHCP;Details of DHCP.
+0NSCS_3IHIF;2026-11-18;80 DNS;Different record types in DNS. Real hierarchy of resolving. Privacy aspects of the DNS. Alternatives to your ISP's DNS (and whether it makes sense). Dynamic DNS. Store arbitrary TXT in DNS. Good guy and bad guy use cases.
+0NSCS_3IHIF;2026-11-25;110 UDP;I'd tell you a UDP joke but you might not get it.
+0NSCS_3IHIF;2026-12-02;120 UDP Applications;"DNS; DHCP, RIP. Also WebRTC, RTP. Students shall find out about these protocols and compare to TCP/IP ACK mechanism"
+0NSCS_3IHIF;2026-12-09;130 HTTP;Full HTTP. Basics (GET, HEAD, ...) of HTTP. Common verbs (PUT, GET, DELETE, PATCH). Idempotent design of REST APIs.
+0NSCS_3IHIF;2026-12-16;135 HTTP Details;Less visible aspects of HTTP: Redirect, permanently moved, auth, non-auth, 429 too many requests. I am a teapot. Server Sent Events (KI chats!)
+0NSCS_3IHIF;2026-12-23;140 HTTP-s;HTTP und TLS (nur Aufgabe und Grundlegender Ablauf, Details im 4. Jhg)
+0NSCS_3IHIF;2027-01-13;150 Cryptographie Intro;Alles, was s ist, ist crypto!
+0NSCS_3IHIF;2027-01-20;160 Symmetrische Cipher;Prinzip, Anwendungsgebiete. Block und  Stream
+0NSCS_3IHIF;2027-01-27;170 Asymmetrische Cipher;Prinzip, Anwendungsgebiete
+0NSCS_3IHIF;2027-02-03;180 SSL, TLS, HTTPS, SSH;Konkrete Beispiele in der Netzwerktechnik
+0NSCS_3IHIF;2027-02-10;190 Design von NW für versch. Anwendungsfälle??;eventuell 4. Jhg?

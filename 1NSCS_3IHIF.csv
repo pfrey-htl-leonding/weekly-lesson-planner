@@ -1,0 +1,19 @@
+Course;Date;Topic;Description
+1NSCS_3IHIF;2026-09-28;10 Recap 3. Jhg (MB);Build a network with 2 private hosts, a NATP-router, 2 public networks in between, and a public IP target host with a webserver. No DNS, just public and private IPs.
+1NSCS_3IHIF;2026-10-05;20 Recap 3. Jhg (PF);Configure the DNS. Adapt Packet Tracer Sample. Add some web servers.
+1NSCS_3IHIF;2026-10-12;30 Recap 3. Jhg;Install Wireshark. Play around, apply basic filters. Promiscous mode, Filter für broadcasts (SSID, mDNS, ...)
+1NSCS_3IHIF;2026-10-19;35 Quiz: Layer 1-5;Public/Private IP. Layer 1-5. NATP. 3 multiple choice, 1 free form. Pencil / Paper. Ca 30 min,
+1NSCS_3IHIF;2026-11-09;70 Port Jagd;Scan and hack an unknown Server
+1NSCS_3IHIF;2026-11-16;40 Routing Protocols;Follow Routing in PT. Apply RIP and OSPF on a given network topology with weights.
+1NSCS_3IHIF;2026-11-23;100 DHCP;Configure DHCP in PT. Practice common pitfalls. Relay agent.
+1NSCS_3IHIF;2026-11-30;105 Quiz;Ports. DHCP. DNS. UDP.
+1NSCS_3IHIF;2026-12-14;100 DHCP;Configure DHCP in PT. Practice common pitfalls. Relay agent.
+1NSCS_3IHIF;2026-12-21;80 DNS;Configure DNS in detail. Follow resolving.
+1NSCS_3IHIF;2027-01-11;120 UDP Applications;ss Tool zum Sehen der Dienste Streaming ansehen (talky.io)
+1NSCS_3IHIF;2027-01-18;130 HTTP;TBD
+1NSCS_3IHIF;2027-02-01;140 HTTP-s;Wireshark: use session key to decipher own traffic.
+1NSCS_3IHIF;2027-02-08;150 Cryptographie Intro;
+1NSCS_3IHIF;2027-02-22;160 Symmetrische Cipher;
+1NSCS_3IHIF;2027-03-01;170 Asymmetrische Cipher;
+1NSCS_3IHIF;2027-03-08;180 SSL, TLS, HTTPS, SSH;
+1NSCS_3IHIF;2027-03-15;190 Design von NW für versch. Anwendungsfälle??;

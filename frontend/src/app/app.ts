@@ -19,6 +19,7 @@ import {
   AppConfig,
   CalendarApi,
   CalendarDay,
+  CalendarWeek,
   CalendarView,
   Course,
   CourseExam,
@@ -1165,14 +1166,26 @@ export class App implements OnInit {
   markerTypeName(type: GlobalDayMarkerType): string { return GlobalDayMarkerType[type]; }
   stateName(state: EffectiveDayState): string { return EffectiveDayState[state]; }
 
+  isCurrentWeek(week: Pick<CalendarWeek, 'isoYear' | 'isoWeek'>, now = new Date()): boolean {
+    const date = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+    const weekday = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - weekday);
+    const isoYear = date.getUTCFullYear();
+    const yearStart = Date.UTC(isoYear, 0, 1);
+    const isoWeek = Math.ceil(((date.getTime() - yearStart) / 86_400_000 + 1) / 7);
+    return week.isoYear === isoYear && week.isoWeek === isoWeek;
+  }
+
   dayStyle(day: CalendarDay): Record<string, string> {
     if (!this.config) return {};
     const color = day.state === EffectiveDayState.Holiday ? this.config.holidayColor
       : day.state === EffectiveDayState.Event ? this.config.eventColor
-      : day.state === EffectiveDayState.Exam ? this.config.examColor
-      : day.scheduledExams.length > 0 ? this.config.examColor
       : '';
     return color ? { 'border-left-color': color } : {};
+  }
+
+  examStyle(): Record<string, string> {
+    return this.config ? { 'border-left-color': this.config.examColor } : {};
   }
 
   private succeed(message: string): void {

@@ -737,12 +737,15 @@ describe('App', () => {
     fixture.detectChanges();
 
     const card = fixture.nativeElement.querySelector('.exam-card');
+    const day = fixture.nativeElement.querySelector('tbody td');
     expect(card.textContent).toContain('Algorithms');
     expect(card.textContent).toContain('Written exam');
     expect(card.querySelectorAll('button')).toHaveLength(0);
+    expect(card.style.borderLeftColor).toBe('rgb(255, 255, 0)');
+    expect(day.style.borderLeftColor).toBe('');
   });
 
-  it('applies configured fixed-day colors in the All topics calendar', () => {
+  it('applies configured colors to global days and only the exam card for exams', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
     component.config = {
@@ -768,7 +771,20 @@ describe('App', () => {
     expect(component.dayStyle({ ...eligibleDay, state: EffectiveDayState.Event }))
       .toEqual({ 'border-left-color': '#0000ff' });
     expect(component.dayStyle(aggregateExamDay))
+      .toEqual({});
+    expect(component.dayStyle({ ...eligibleDay, state: EffectiveDayState.Exam }))
+      .toEqual({});
+    expect(component.examStyle())
       .toEqual({ 'border-left-color': '#ffff00' });
+  });
+
+  it('identifies the current ISO week, including an ISO year boundary', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const date = new Date(2027, 0, 1);
+
+    expect(component.isCurrentWeek({ isoYear: 2026, isoWeek: 53 }, date)).toBe(true);
+    expect(component.isCurrentWeek({ isoYear: 2027, isoWeek: 1 }, date)).toBe(false);
   });
 
   it('shifts forward while preserving the source gap regardless of schedule editing', () => {

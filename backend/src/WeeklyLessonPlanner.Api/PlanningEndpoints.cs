@@ -31,6 +31,16 @@ public static class PlanningEndpoints
             return impact is null ? Results.NotFound() : Results.Ok(impact);
         });
 
+        planning.MapPut("/assignments/{id:guid}/preparation", async (
+            Guid id,
+            SetTopicPreparationCommand command,
+            IPlanningService service,
+            CancellationToken token) =>
+        {
+            var preparation = await service.SetTopicPreparationAsync(id, command, token);
+            return preparation is null ? Results.NotFound() : Results.Ok(preparation);
+        });
+
         planning.MapPost("/add-all", async (
             MultipleTopicPlanningCommand command,
             IPlanningService service,

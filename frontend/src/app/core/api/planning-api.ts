@@ -23,6 +23,11 @@ export interface DragTopicCommand {
   insertShiftsSchedule: boolean;
 }
 
+export interface TopicPreparation {
+  assignmentId: string;
+  isPrepared: boolean;
+}
+
 export interface MultipleTopicPlanningCommand {
   courseId: string;
   from: string | null;
@@ -108,6 +113,10 @@ export class PlanningApi {
 
   drag(command: DragTopicCommand): Observable<PlanningImpact> {
     return this.api.post('/api/planning/drag', command);
+  }
+
+  setTopicPreparation(assignmentId: string, isPrepared: boolean): Observable<TopicPreparation> {
+    return this.api.put(`/api/planning/assignments/${assignmentId}/preparation`, { isPrepared });
   }
 
   addAll(command: MultipleTopicPlanningCommand): Observable<MultipleTopicPlanningResult> {

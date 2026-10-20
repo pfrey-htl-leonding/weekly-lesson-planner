@@ -97,7 +97,8 @@ public sealed record ScheduledTopicDto(
     Guid CourseId,
     string CourseName,
     string Heading,
-    string Description);
+    string Description,
+    bool IsPrepared = false);
 
 public sealed record ScheduledExamDto(
     Guid Id,

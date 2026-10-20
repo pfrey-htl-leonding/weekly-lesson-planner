@@ -1,4 +1,5 @@
 using System.Data;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
@@ -141,6 +142,23 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         var noOp = BuildImpact(schedule, selected.Id, selected.Id, []);
         await CommitConflictSafeAsync(transaction, cancellationToken);
         return noOp;
+    }
+
+    public async Task<TopicPreparationDto?> SetTopicPreparationAsync(
+        Guid assignmentId,
+        SetTopicPreparationCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        var assignment = await dbContext.TopicAssignments
+            .SingleOrDefaultAsync(item => item.Id == assignmentId, cancellationToken);
+        if (assignment is null)
+        {
+            return null;
+        }
+
+        assignment.IsPrepared = command.IsPrepared;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new TopicPreparationDto(assignment.Id, assignment.IsPrepared);
     }
 
     public async Task<MultipleTopicPlanningResultDto> AddAllTopicsAsync(
@@ -1004,7 +1022,12 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
 
         foreach (var assignment in changed)
         {
-            assignment.Date = finalDates[assignment.Id];
+            var finalDate = finalDates[assignment.Id];
+            if (!IsSameIsoWeek(schedule.OriginalDates[assignment.Id], finalDate))
+            {
+                assignment.IsPrepared = false;
+            }
+            assignment.Date = finalDate;
         }
 
         foreach (var assignment in added)
@@ -1181,6 +1204,14 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
     private static IsoWeekday ToIsoWeekday(DateOnly date) => date.DayOfWeek == DayOfWeek.Sunday
         ? IsoWeekday.Sunday
         : (IsoWeekday)date.DayOfWeek;
+
+    private static bool IsSameIsoWeek(DateOnly left, DateOnly right)
+    {
+        var leftDate = left.ToDateTime(TimeOnly.MinValue);
+        var rightDate = right.ToDateTime(TimeOnly.MinValue);
+        return ISOWeek.GetYear(leftDate) == ISOWeek.GetYear(rightDate) &&
+            ISOWeek.GetWeekOfYear(leftDate) == ISOWeek.GetWeekOfYear(rightDate);
+    }
 
     private static void ValidateMarker(SaveGlobalDayMarkerCommand command)
     {

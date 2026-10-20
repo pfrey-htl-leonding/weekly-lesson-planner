@@ -532,6 +532,11 @@ export class App implements OnInit {
     this.changeDetector.markForCheck();
   }
 
+  openTopicFromAllCourses(topic: ScheduledTopic): void {
+    if (this.selectedCourseIds.length !== 0) return;
+    this.editTopic(topic);
+  }
+
   clearTopic(): void {
     this.editingTopicId = null;
     this.topicDraft = { heading: '', description: '' };
@@ -539,7 +544,7 @@ export class App implements OnInit {
   }
 
   saveTopic(): void {
-    if (!this.topicCourseId || !this.isCourseSelected(this.topicCourseId)) return;
+    if (!this.topicCourseId || (!this.editingTopicId && !this.isCourseSelected(this.topicCourseId))) return;
     const command: SaveTopic = { courseId: this.topicCourseId, ...this.topicDraft };
     const wasEditing = this.editingTopicId !== null;
     const request = this.editingTopicId
@@ -674,6 +679,24 @@ export class App implements OnInit {
       assignmentId: topic.assignmentId,
       deleteShiftsSchedule: this.editShiftsSchedule,
     }), `Removed “${topic.heading}”`);
+  }
+
+  setTopicPreparation(topic: ScheduledTopic, isPrepared: boolean): void {
+    const previous = topic.isPrepared;
+    topic.isPrepared = isPrepared;
+    this.busy = true;
+    this.planningApi.setTopicPreparation(topic.assignmentId, isPrepared).subscribe({
+      next: preparation => {
+        topic.isPrepared = preparation.isPrepared;
+        this.busy = false;
+        this.error = '';
+        this.changeDetector.markForCheck();
+      },
+      error: error => {
+        topic.isPrepared = previous;
+        this.handleError(error);
+      },
+    });
   }
 
   addAllTopics(): void {
@@ -1174,6 +1197,12 @@ export class App implements OnInit {
     const yearStart = Date.UTC(isoYear, 0, 1);
     const isoWeek = Math.ceil(((date.getTime() - yearStart) / 86_400_000 + 1) / 7);
     return week.isoYear === isoYear && week.isoWeek === isoWeek;
+  }
+
+  isNextWeek(week: Pick<CalendarWeek, 'isoYear' | 'isoWeek'>, now = new Date()): boolean {
+    const nextWeek = new Date(now.getTime());
+    nextWeek.setDate(nextWeek.getDate() + 7);
+    return this.isCurrentWeek(week, nextWeek);
   }
 
   dayStyle(day: CalendarDay): Record<string, string> {

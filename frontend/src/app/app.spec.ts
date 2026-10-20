@@ -62,6 +62,7 @@ const planningApi = {
   place: vi.fn(() => of(emptyImpact)),
   remove: vi.fn(() => of(emptyImpact)),
   drag: vi.fn(() => of(emptyImpact)),
+  setTopicPreparation: vi.fn((assignmentId: string, isPrepared: boolean) => of({ assignmentId, isPrepared })),
   addAll: vi.fn(() => of({
     affectedTopicCount: 2,
     firstAffectedDate: '2026-09-07',
@@ -127,6 +128,7 @@ const scheduledTopic = {
   courseName: 'Course',
   heading: 'Trees',
   description: '',
+  isPrepared: false,
 };
 
 describe('App', () => {
@@ -534,6 +536,40 @@ describe('App', () => {
     });
   });
 
+  it('opens a clicked All courses topic without changing the course view', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseIds = [];
+    component.managementTabIndex = 4;
+
+    component.openTopicFromAllCourses({
+      ...scheduledTopic,
+      heading: 'Trees',
+      description: 'Balanced search trees',
+    });
+
+    expect(component.selectedCourseIds).toEqual([]);
+    expect(component.managementTabIndex).toBe(0);
+    expect(component.editingTopicId).toBe('topic');
+    expect(component.topicCourseId).toBe('course');
+  });
+
+  it('saves a topic opened from All courses', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedCourseIds = [];
+    component.editTopic(scheduledTopic);
+    component.topicDraft.description = 'Updated from All courses';
+
+    component.saveTopic();
+
+    expect(topicApi.updateTopic).toHaveBeenCalledWith('topic', {
+      courseId: 'course',
+      heading: 'Trees',
+      description: 'Updated from All courses',
+    });
+  });
+
   it('does not call the planning API while a topic is merely dragged over a valid day', () => {
     const fixture = TestBed.createComponent(App);
     const component = fixture.componentInstance;
@@ -785,6 +821,28 @@ describe('App', () => {
 
     expect(component.isCurrentWeek({ isoYear: 2026, isoWeek: 53 }, date)).toBe(true);
     expect(component.isCurrentWeek({ isoYear: 2027, isoWeek: 1 }, date)).toBe(false);
+  });
+
+  it('identifies only the immediately following ISO week, including a year boundary', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const date = new Date(2026, 11, 31);
+
+    expect(component.isNextWeek({ isoYear: 2027, isoWeek: 1 }, date)).toBe(true);
+    expect(component.isNextWeek({ isoYear: 2026, isoWeek: 53 }, date)).toBe(false);
+    expect(component.isNextWeek({ isoYear: 2027, isoWeek: 2 }, date)).toBe(false);
+  });
+
+  it('persists preparation state for a scheduled topic', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    const topic = { ...scheduledTopic };
+
+    component.setTopicPreparation(topic, true);
+
+    expect(planningApi.setTopicPreparation).toHaveBeenCalledWith('assignment', true);
+    expect(topic.isPrepared).toBe(true);
+    expect(component.busy).toBe(false);
   });
 
   it('shifts forward while preserving the source gap regardless of schedule editing', () => {

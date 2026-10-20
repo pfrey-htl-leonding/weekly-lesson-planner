@@ -257,7 +257,8 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
             {
                 item.Date,
                 Topic = new ScheduledTopicDto(item.Id, item.TopicInstanceId, item.TopicInstance.TopicId, item.CourseId,
-                    item.TopicInstance.Topic.Course.Name, item.TopicInstance.Topic.Heading, item.TopicInstance.Topic.Description)
+                    item.TopicInstance.Topic.Course.Name, item.TopicInstance.Topic.Heading,
+                    item.TopicInstance.Topic.Description, item.IsPrepared)
             }).ToListAsync(cancellationToken);
         var scheduledTopics = assignments.GroupBy(item => item.Date)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<ScheduledTopicDto>)group.Select(item => item.Topic).ToArray());

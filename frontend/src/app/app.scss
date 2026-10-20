@@ -78,8 +78,13 @@ td.cdk-drop-list-dragging { background-color: color-mix(in srgb, var(--mat-sys-p
 td.fixed-day { background-color: var(--mat-sys-surface-container-high); }
 .lesson-slot { margin-top: .4rem; }
 .scheduled-topic { background: var(--mat-sys-surface); border: 1px solid var(--mat-sys-outline-variant); border-radius: .3rem; box-sizing: border-box; margin-top: .2rem; max-width: 100%; min-width: 0; overflow: hidden; padding: .22rem .3rem; width: 100%; }
+.scheduled-topic.topic-clickable { cursor: pointer; }
 .scheduled-topic-heading { align-items: center; display: flex; gap: .35rem; max-width: 100%; min-width: 0; }
 .scheduled-topic-heading > div { flex: 1 1 auto; min-width: 0; }
+.scheduled-topic-course-row { align-items: center; display: flex; gap: .25rem; min-width: 0; }
+.scheduled-topic-course-row small { flex: 1 1 auto; min-width: 0; }
+.topic-preparation { align-items: center; display: flex; flex: 0 0 auto; font-size: .65rem; gap: .2rem; line-height: .8rem; white-space: nowrap; }
+.topic-preparation input { height: .65rem; margin: 0; width: .65rem; }
 .scheduled-topic small { color: var(--mat-sys-primary); display: block; font-size: .65rem; font-weight: 600; line-height: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduled-topic strong { font-size: .75rem; line-height: .95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scheduled-topic span { color: var(--mat-sys-on-surface-variant); font-size: .65rem; line-height: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

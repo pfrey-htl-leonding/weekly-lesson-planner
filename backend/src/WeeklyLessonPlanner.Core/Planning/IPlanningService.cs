@@ -19,6 +19,10 @@ public interface IPlanningService
     Task<PlanningImpactDto?> DragTopicAsync(
         DragTopicCommand command,
         CancellationToken cancellationToken = default);
+    Task<TopicPreparationDto?> SetTopicPreparationAsync(
+        Guid assignmentId,
+        SetTopicPreparationCommand command,
+        CancellationToken cancellationToken = default);
     Task<MultipleTopicPlanningResultDto> AddAllTopicsAsync(
         MultipleTopicPlanningCommand command,
         CancellationToken cancellationToken = default);

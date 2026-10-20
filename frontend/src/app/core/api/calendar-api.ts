@@ -106,6 +106,7 @@ export interface ScheduledTopic {
   courseName: string;
   heading: string;
   description: string;
+  isPrepared: boolean;
 }
 
 export interface CalendarWeek {

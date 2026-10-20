@@ -19,6 +19,10 @@ public sealed record DragTopicCommand(
     bool DeleteShiftsSchedule,
     bool InsertShiftsSchedule);
 
+public sealed record SetTopicPreparationCommand(bool IsPrepared);
+
+public sealed record TopicPreparationDto(Guid AssignmentId, bool IsPrepared);
+
 public sealed record MultipleTopicPlanningCommand(
     Guid CourseId,
     DateOnly? From,

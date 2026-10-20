@@ -93,6 +93,7 @@ public sealed class TopicAssignment
     public Guid TopicInstanceId { get; set; }
     public Guid CourseId { get; set; }
     public DateOnly Date { get; set; }
+    public bool IsPrepared { get; set; }
     public uint Version { get; set; }
     public TopicInstance TopicInstance { get; set; } = null!;
 }

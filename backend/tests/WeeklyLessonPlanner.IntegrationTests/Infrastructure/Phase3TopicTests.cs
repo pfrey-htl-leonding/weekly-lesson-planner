@@ -47,9 +47,30 @@ public sealed class Phase3TopicTests
             Assert.Empty(await topics.GetUnplannedInstancesAsync(course.Id, null));
             var aggregateView = await calendar.GetCalendarAsync(null, SchoolYear.DefaultId);
             var selectedView = await calendar.GetCalendarAsync(course.Id, null);
-            Assert.Equal("Binary search", FindDay(aggregateView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().Heading);
+            var scheduled = FindDay(aggregateView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single();
+            Assert.Equal("Binary search", scheduled.Heading);
+            Assert.False(scheduled.IsPrepared);
             Assert.Equal(course.Name, FindDay(selectedView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().CourseName);
             Assert.Equal(topic.Id, FindDay(selectedView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().TopicId);
+
+            var preparation = await planning.SetTopicPreparationAsync(
+                scheduled.AssignmentId,
+                new SetTopicPreparationCommand(true));
+            Assert.True(preparation!.IsPrepared);
+            aggregateView = await calendar.GetCalendarAsync(null, SchoolYear.DefaultId);
+            Assert.True(FindDay(aggregateView, new DateOnly(2027, 3, 3)).ScheduledTopics.Single().IsPrepared);
+
+            var nextLessonDay = (await calendar.GetCalendarAsync(course.Id, null)).Weeks
+                .SelectMany(week => week.Days)
+                .First(day => day.Date > new DateOnly(2027, 3, 3) &&
+                    day.IsCourseDay && day.State == EffectiveDayState.Normal && day.ScheduledTopics.Count == 0);
+            await planning.DragTopicAsync(new(
+                scheduled.AssignmentId,
+                nextLessonDay.Date,
+                false,
+                false));
+            aggregateView = await calendar.GetCalendarAsync(null, SchoolYear.DefaultId);
+            Assert.False(FindDay(aggregateView, nextLessonDay.Date).ScheduledTopics.Single().IsPrepared);
             await Assert.ThrowsAsync<PlanningConflictException>(() =>
                 topics.DeleteUnplannedInstanceAsync(source.Id));
 

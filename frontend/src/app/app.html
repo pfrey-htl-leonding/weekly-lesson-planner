@@ -349,7 +349,7 @@
             <thead><tr><th class="week-column">ISO week</th>@for (day of calendar.visibleWeekdays; track day) { <th>{{ weekdayName(day) }}</th> }</tr></thead>
             <tbody>
               @for (week of calendar.weeks; track week.isoYear + '-' + week.isoWeek) {
-                <tr><th class="week-column" [style.background]="isCurrentWeek(week) ? 'var(--mat-sys-surface-container-high)' : null">{{ week.isoYear }}-W{{ week.isoWeek.toString().padStart(2, '0') }}</th>
+                <tr><th class="week-column" [style.background]="isCurrentWeek(week) ? 'var(--mat-sys-surface-container-highest)' : null">{{ week.isoYear }}-W{{ week.isoWeek.toString().padStart(2, '0') }}</th>
                   @for (day of week.days; track day.date) {
                     <td
                       cdkDropList
@@ -388,13 +388,30 @@
                       @for (topic of day.scheduledTopics; track topic.assignmentId) {
                         <article
                           class="scheduled-topic"
+                          [class.topic-clickable]="selectedCourseIds.length === 0"
                           cdkDrag
                           [cdkDragData]="scheduledDragData(topic, day.date)"
-                          [cdkDragDisabled]="busy || selectedCourseIds.length === 0">
+                          [cdkDragDisabled]="busy || selectedCourseIds.length === 0"
+                          (click)="openTopicFromAllCourses(topic)">
                           <div class="scheduled-topic-heading">
                             @if (selectedCourseIds.length > 0) { <mat-icon cdkDragHandle class="drag-handle" aria-hidden="true" title="Drag topic to another lesson day">drag_indicator</mat-icon> }
                             <div>
-                              @if (selectedCourseIds.length !== 1) { <small>{{ topic.courseName }}</small> }
+                              @if (selectedCourseIds.length !== 1) {
+                                <div class="scheduled-topic-course-row">
+                                  <small>{{ topic.courseName }}</small>
+                                  @if (selectedCourseIds.length === 0 && isNextWeek(week)) {
+                                    <label class="topic-preparation" (click)="$event.stopPropagation()">
+                                      Prep.
+                                      <input
+                                        type="checkbox"
+                                        [checked]="topic.isPrepared"
+                                        [disabled]="busy"
+                                        [attr.aria-label]="'Prepared for ' + topic.heading"
+                                        (change)="setTopicPreparation(topic, $any($event.target).checked)">
+                                    </label>
+                                  }
+                                </div>
+                              }
                               <strong>{{ topic.heading }}</strong>
                             </div>
                           </div>

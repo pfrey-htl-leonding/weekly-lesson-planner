@@ -314,6 +314,9 @@ namespace WeeklyLessonPlanner.Infrastructure.Persistence.Migrations
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date");
 
+                    b.Property<bool>("IsPrepared")
+                        .HasColumnType("boolean");
+
                     b.Property<Guid>("TopicInstanceId")
                         .HasColumnType("uuid");
 

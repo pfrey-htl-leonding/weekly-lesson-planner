@@ -5,6 +5,9 @@ public interface ITopicService
     Task<IReadOnlyList<TopicDto>> GetTopicsAsync(Guid? courseId, CancellationToken cancellationToken = default);
     Task<TopicDto?> GetTopicAsync(Guid id, CancellationToken cancellationToken = default);
     Task<TopicDto> CreateTopicAsync(SaveTopicCommand command, CancellationToken cancellationToken = default);
+    Task<ImportTopicCatalogResultDto> ImportTopicCatalogAsync(
+        ImportTopicCatalogCommand command,
+        CancellationToken cancellationToken = default);
     Task<TopicDto?> UpdateTopicAsync(Guid id, SaveTopicCommand command, CancellationToken cancellationToken = default);
     Task<bool> DeleteTopicAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TopicInstanceDto>> GetUnplannedInstancesAsync(

@@ -2,13 +2,52 @@
   <mat-icon aria-hidden="true">calendar_view_week</mat-icon>
   <span>Weekly Lesson Planner</span>
   <span class="toolbar-spacer"></span>
-  <span class="phase-label">Course rollover · Phase 5.2</span>
+  @if (readyWorkspaces().length > 0) {
+    <mat-form-field class="workspace-selector" subscriptSizing="dynamic">
+      <mat-label>Workspace</mat-label>
+      <mat-select [ngModel]="activeWorkspaceSlug" (selectionChange)="selectWorkspace($event.value)" [disabled]="busy">
+        @for (workspace of readyWorkspaces(); track workspace.id) {
+          <mat-option [value]="workspace.slug">{{ workspace.displayName }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
 </mat-toolbar>
 
 <main class="app-content">
   @if (error) { <div class="notice error" role="alert">{{ error }}</div> }
   @if (message) { <div class="notice success" role="status">{{ message }}</div> }
 
+  @if (!activeWorkspaceSlug) {
+    <mat-card appearance="outlined" class="empty-workspace-card">
+      @if (readyWorkspaces().length > 0) {
+        <mat-card-header><mat-card-title>Select a workspace</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <p>Choose a workspace from the selector in the header.</p>
+        </mat-card-content>
+      } @else {
+        <mat-card-header><mat-card-title>Create the first workspace</mat-card-title></mat-card-header>
+        <mat-card-content class="form-grid">
+          <p>No ready workspace exists yet. A workspace contains one independent lesson planner.</p>
+          <mat-form-field><mat-label>Workspace name</mat-label><input matInput [(ngModel)]="workspaceDraft.displayName" (ngModelChange)="suggestWorkspaceSlug()" maxlength="100"></mat-form-field>
+          <mat-form-field>
+            <mat-label>Workspace key</mat-label>
+            <input matInput [(ngModel)]="workspaceDraft.slug" (ngModelChange)="markWorkspaceSlugEdited()" maxlength="40" pattern="[a-z][a-z0-9-]{1,38}[a-z0-9]" placeholder="for example: teacher-one">
+            <mat-hint>3–40 lowercase letters, digits, or hyphens.</mat-hint>
+          </mat-form-field>
+          <button mat-flat-button (click)="createWorkspace()" [disabled]="!canCreateWorkspace()">Create workspace</button>
+          @for (workspace of workspaces; track workspace.id) {
+            @if (workspace.status === 'failed') {
+              <div class="failed-workspace" role="alert">
+                <span><strong>{{ workspace.displayName }}</strong>: {{ workspace.provisioningError || 'Provisioning failed.' }}</span>
+                <button mat-stroked-button (click)="retryWorkspace(workspace)" [disabled]="busy">Retry</button>
+              </div>
+            }
+          }
+        </mat-card-content>
+      }
+    </mat-card>
+  } @else {
   <section class="workspace" cdkDropListGroup>
     <aside class="controls">
       <mat-card appearance="outlined" class="management-card">
@@ -302,6 +341,26 @@
                 <button mat-flat-button (click)="exportData()" [disabled]="busy">Export</button>
                 <button mat-stroked-button (click)="importData()" [disabled]="busy">Import</button>
               </div>
+
+              <div class="section-divider"></div>
+              <h3>Workspace administration</h3>
+              <p class="field-note">Create a separate empty planner. Everyone who can open this application can currently access every workspace.</p>
+              <mat-form-field><mat-label>Workspace name</mat-label><input matInput [(ngModel)]="workspaceDraft.displayName" (ngModelChange)="suggestWorkspaceSlug()" maxlength="100"></mat-form-field>
+              <mat-form-field>
+                <mat-label>Workspace key</mat-label>
+                <input matInput [(ngModel)]="workspaceDraft.slug" (ngModelChange)="markWorkspaceSlugEdited()" maxlength="40" pattern="[a-z][a-z0-9-]{1,38}[a-z0-9]" placeholder="for example: teacher-one">
+                <mat-hint>Used in the URL; lowercase letters, digits, and hyphens only.</mat-hint>
+              </mat-form-field>
+              <button mat-flat-button (click)="createWorkspace()" [disabled]="!canCreateWorkspace()">Create workspace</button>
+              <button mat-stroked-button class="delete-workspace-button" (click)="deleteWorkspace()" [disabled]="busy">Delete workspace</button>
+              @for (workspace of workspaces; track workspace.id) {
+                @if (workspace.status === 'failed') {
+                  <div class="failed-workspace" role="alert">
+                    <span><strong>{{ workspace.displayName }}</strong>: {{ workspace.provisioningError || 'Provisioning failed.' }}</span>
+                    <button mat-stroked-button (click)="retryWorkspace(workspace)" [disabled]="busy">Retry</button>
+                  </div>
+                }
+              }
             </div>
           </mat-tab>
         </mat-tab-group>
@@ -438,4 +497,5 @@
       } @else { <p>Loading calendar…</p> }
     </section>
   </section>
+  }
 </main>

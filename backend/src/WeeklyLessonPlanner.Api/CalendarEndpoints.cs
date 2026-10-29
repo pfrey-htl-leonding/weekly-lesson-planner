@@ -7,7 +7,7 @@ public static class CalendarEndpoints
 {
     public static IEndpointRouteBuilder MapCalendarEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var api = endpoints.MapGroup("/api");
+        var api = endpoints.MapGroup(string.Empty);
 
         api.MapGet("/config", (ICalendarService service, CancellationToken token) =>
             service.GetConfigAsync(token));
@@ -16,11 +16,17 @@ public static class CalendarEndpoints
 
         var schoolYears = api.MapGroup("/school-years");
         schoolYears.MapGet("/", (ICalendarService service, CancellationToken token) => service.GetSchoolYearsAsync(token));
-        schoolYears.MapPost("/", async (SaveSchoolYearCommand command, ICalendarService service, CancellationToken token) =>
+        schoolYears.MapPost("/", async (string workspaceSlug, SaveSchoolYearCommand command, ICalendarService service, CancellationToken token) =>
         {
             var schoolYear = await service.CreateSchoolYearAsync(command, token);
-            return Results.Created($"/api/school-years/{schoolYear.Id}", schoolYear);
+            return Results.Created(
+                $"/api/workspaces/{workspaceSlug}/school-years/{schoolYear.Id}", schoolYear);
         });
+        schoolYears.MapPost("/import", async (
+            ImportSchoolYearCommand command,
+            IPlanningService service,
+            CancellationToken token) =>
+            Results.Ok(await service.ImportSchoolYearAsync(command, token)));
         schoolYears.MapPut("/{id:guid}", async (Guid id, SaveSchoolYearCommand command, ICalendarService service, CancellationToken token) =>
         {
             var schoolYear = await service.UpdateSchoolYearAsync(id, command, token);
@@ -37,11 +43,17 @@ public static class CalendarEndpoints
             var course = await service.GetCourseAsync(id, token);
             return course is null ? Results.NotFound() : Results.Ok(course);
         });
-        courses.MapPost("/", async (SaveCourseCommand command, ICalendarService service, CancellationToken token) =>
+        courses.MapPost("/", async (string workspaceSlug, SaveCourseCommand command, ICalendarService service, CancellationToken token) =>
         {
             var course = await service.CreateCourseAsync(command, token);
-            return Results.Created($"/api/courses/{course.Id}", course);
+            return Results.Created(
+                $"/api/workspaces/{workspaceSlug}/courses/{course.Id}", course);
         });
+        courses.MapPost("/import", async (
+            ImportCourseCatalogCommand command,
+            ICalendarService service,
+            CancellationToken token) =>
+            Results.Ok(await service.ImportCourseCatalogAsync(command, token)));
         courses.MapPut("/{id:guid}", async (Guid id, SaveCourseCommand command, ICalendarService service, CancellationToken token) =>
         {
             var course = await service.UpdateCourseAsync(id, command, token);
@@ -53,18 +65,21 @@ public static class CalendarEndpoints
         var markers = api.MapGroup("/global-markers");
         markers.MapGet("/", (Guid schoolYearId, ICalendarService service, CancellationToken token) =>
             service.GetGlobalMarkersAsync(schoolYearId, token));
-        markers.MapPost("/", async (SaveGlobalDayMarkerCommand command, IPlanningService service, CancellationToken token) =>
+        markers.MapPost("/", async (string workspaceSlug, SaveGlobalDayMarkerCommand command, IPlanningService service, CancellationToken token) =>
         {
             var marker = await service.CreateGlobalMarkerAsync(command, token);
-            return Results.Created($"/api/global-markers/{marker.Id}", marker);
+            return Results.Created(
+                $"/api/workspaces/{workspaceSlug}/global-markers/{marker.Id}", marker);
         });
         markers.MapPost("/range", async (
+            string workspaceSlug,
             SaveGlobalDayMarkerRangeCommand command,
             IPlanningService service,
             CancellationToken token) =>
         {
             var created = await service.CreateGlobalMarkerRangeAsync(command, token);
-            return Results.Created("/api/global-markers", created);
+            return Results.Created(
+                $"/api/workspaces/{workspaceSlug}/global-markers", created);
         });
         markers.MapPut("/{id:guid}", async (Guid id, SaveGlobalDayMarkerCommand command, IPlanningService service, CancellationToken token) =>
         {
@@ -77,10 +92,11 @@ public static class CalendarEndpoints
         var exams = api.MapGroup("/course-exams");
         exams.MapGet("/", (Guid? courseId, ICalendarService service, CancellationToken token) =>
             service.GetCourseExamsAsync(courseId, token));
-        exams.MapPost("/", async (SaveCourseExamCommand command, IPlanningService service, CancellationToken token) =>
+        exams.MapPost("/", async (string workspaceSlug, SaveCourseExamCommand command, IPlanningService service, CancellationToken token) =>
         {
             var exam = await service.CreateCourseExamAsync(command, token);
-            return Results.Created($"/api/course-exams/{exam.Id}", exam);
+            return Results.Created(
+                $"/api/workspaces/{workspaceSlug}/course-exams/{exam.Id}", exam);
         });
         exams.MapPut("/{id:guid}", async (Guid id, SaveCourseExamCommand command, IPlanningService service, CancellationToken token) =>
         {

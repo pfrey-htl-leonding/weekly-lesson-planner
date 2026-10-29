@@ -43,6 +43,10 @@ export interface SchoolYear {
 
 export type SaveSchoolYear = Omit<SchoolYear, 'id'>;
 
+export interface ImportSchoolYear extends SaveSchoolYear {
+  markers: { date: string; type: GlobalDayMarkerType; label: string | null }[];
+}
+
 export interface Course {
   id: string;
   schoolYearId: string;
@@ -52,6 +56,18 @@ export interface Course {
 }
 
 export type SaveCourse = Omit<Course, 'id'>;
+
+export interface ImportCourseCatalog {
+  schoolYearId: string;
+  defaultWeekdays: IsoWeekday[];
+  courses: { name: string; description: string }[];
+}
+
+export interface CatalogImportResult {
+  importedCount: number;
+  updatedCount: number;
+  createdCount: number;
+}
 
 export interface GlobalDayMarker {
   id: string;
@@ -140,12 +156,16 @@ export class CalendarApi {
   updateConfig(command: SaveAppConfig): Observable<AppConfig> { return this.api.put('/api/config', command); }
   getSchoolYears(): Observable<SchoolYear[]> { return this.api.get('/api/school-years'); }
   createSchoolYear(command: SaveSchoolYear): Observable<SchoolYear> { return this.api.post('/api/school-years', command); }
+  importSchoolYear(command: ImportSchoolYear): Observable<SchoolYear> { return this.api.post('/api/school-years/import', command); }
   updateSchoolYear(id: string, command: SaveSchoolYear): Observable<SchoolYear> { return this.api.put(`/api/school-years/${id}`, command); }
   deleteSchoolYear(id: string): Observable<void> { return this.api.delete(`/api/school-years/${id}`); }
   getCourses(schoolYearId?: string): Observable<Course[]> {
     return this.api.get(`/api/courses${schoolYearId ? `?schoolYearId=${schoolYearId}` : ''}`);
   }
   createCourse(command: SaveCourse): Observable<Course> { return this.api.post('/api/courses', command); }
+  importCourseCatalog(command: ImportCourseCatalog): Observable<CatalogImportResult> {
+    return this.api.post('/api/courses/import', command);
+  }
   updateCourse(id: string, command: SaveCourse): Observable<Course> { return this.api.put(`/api/courses/${id}`, command); }
   deleteCourse(id: string): Observable<void> { return this.api.delete(`/api/courses/${id}`); }
   getMarkers(schoolYearId: string): Observable<GlobalDayMarker[]> {

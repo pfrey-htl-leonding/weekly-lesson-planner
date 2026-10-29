@@ -4,6 +4,7 @@ using WeeklyLessonPlanner.Core.Planning;
 using WeeklyLessonPlanner.Infrastructure;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
 using WeeklyLessonPlanner.Api;
+using WeeklyLessonPlanner.Infrastructure.Workspaces;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,12 +36,17 @@ if (app.Environment.IsDevelopment())
 
 if (app.Configuration.GetValue<bool>("Database:ApplyMigrations"))
 {
-    await using var scope = app.Services.CreateAsyncScope();
-    var dbContext = scope.ServiceProvider.GetRequiredService<PlannerDbContext>();
-    await dbContext.Database.MigrateAsync();
+    var initializer = app.Services.GetRequiredService<WorkspaceDatabaseInitializer>();
+    await initializer.InitializeAsync();
 }
 
-app.MapGet("/api/system/status", async (
+app.UseRouting();
+app.UseMiddleware<WorkspaceResolutionMiddleware>();
+
+app.MapWorkspaceEndpoints();
+var workspaceApi = app.MapGroup("/api/workspaces/{workspaceSlug}");
+
+workspaceApi.MapGet("/system/status", async (
         IPlanningService planningService,
         CancellationToken cancellationToken) =>
     {
@@ -50,9 +56,9 @@ app.MapGet("/api/system/status", async (
     .WithName("GetSystemStatus")
     .WithTags("System");
 
-app.MapCalendarEndpoints();
-app.MapTopicEndpoints();
-app.MapPlanningEndpoints();
+workspaceApi.MapCalendarEndpoints();
+workspaceApi.MapTopicEndpoints();
+workspaceApi.MapPlanningEndpoints();
 
 app.MapHealthChecks("/health/live", new HealthCheckOptions
 {

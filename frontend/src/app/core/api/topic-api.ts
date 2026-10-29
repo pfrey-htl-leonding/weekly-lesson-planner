@@ -1,6 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ApiClient } from './api-client';
+import type { CatalogImportResult } from './calendar-api';
 
 export interface TopicDefinition {
   id: string;
@@ -36,6 +37,13 @@ export class TopicApi {
 
   createTopic(command: SaveTopic): Observable<TopicDefinition> {
     return this.api.post('/api/topics', command);
+  }
+
+  importTopicCatalog(command: {
+    courseId: string;
+    topics: { heading: string; description: string }[];
+  }): Observable<CatalogImportResult> {
+    return this.api.post('/api/topics/import', command);
   }
 
   updateTopic(id: string, command: SaveTopic): Observable<TopicDefinition> {

@@ -6,7 +6,7 @@ public static class PlanningEndpoints
 {
     public static IEndpointRouteBuilder MapPlanningEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        var planning = endpoints.MapGroup("/api/planning");
+        var planning = endpoints.MapGroup("/planning");
 
         planning.MapPost("/place", async (
             PlaceTopicCommand command,

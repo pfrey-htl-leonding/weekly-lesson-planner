@@ -1,23 +1,23 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using WeeklyLessonPlanner.Infrastructure.Persistence;
+using Npgsql;
+using WeeklyLessonPlanner.Infrastructure.Workspaces;
 
 namespace WeeklyLessonPlanner.Infrastructure.Health;
 
-internal sealed class PlannerDatabaseHealthCheck(IServiceScopeFactory scopeFactory) : IHealthCheck
+internal sealed class PlannerDatabaseHealthCheck(WorkspaceDatabaseSettings settings) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<PlannerDbContext>();
-
         try
         {
-            return await dbContext.Database.CanConnectAsync(cancellationToken)
-                ? HealthCheckResult.Healthy("PostgreSQL is reachable.")
-                : HealthCheckResult.Unhealthy("PostgreSQL is not reachable.");
+            await using var connection = new NpgsqlConnection(settings.RuntimeConnectionString);
+            await connection.OpenAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(
+                "SELECT EXISTS (SELECT 1 FROM planner_control.workspaces)", connection);
+            await command.ExecuteScalarAsync(cancellationToken);
+            return HealthCheckResult.Healthy("PostgreSQL and the workspace catalog are reachable.");
         }
         catch (Exception exception)
         {
@@ -25,4 +25,3 @@ internal sealed class PlannerDatabaseHealthCheck(IServiceScopeFactory scopeFacto
         }
     }
 }
-

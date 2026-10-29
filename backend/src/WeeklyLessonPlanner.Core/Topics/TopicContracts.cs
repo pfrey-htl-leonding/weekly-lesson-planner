@@ -11,6 +11,17 @@ public sealed record TopicDto(
 
 public sealed record SaveTopicCommand(Guid CourseId, string Heading, string Description);
 
+public sealed record ImportTopicCatalogItemCommand(string Heading, string Description);
+
+public sealed record ImportTopicCatalogCommand(
+    Guid CourseId,
+    IReadOnlyList<ImportTopicCatalogItemCommand> Topics);
+
+public sealed record ImportTopicCatalogResultDto(
+    int ImportedCount,
+    int UpdatedCount,
+    int CreatedCount);
+
 public sealed record TopicInstanceDto(
     Guid Id,
     Guid TopicId,

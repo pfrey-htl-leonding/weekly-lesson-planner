@@ -559,6 +559,98 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         return CalendarService.ToDto(marker);
     }
 
+    public async Task<SchoolYearDto> ImportSchoolYearAsync(
+        ImportSchoolYearCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateSchoolYearImport(command);
+        var name = command.Name.Trim();
+        var normalizedName = name.ToLower();
+        var markersByDate = command.Markers.ToDictionary(marker => marker.Date);
+
+        await using var transaction = await BeginTransactionAsync(cancellationToken);
+        var schoolYear = await dbContext.SchoolYears
+            .SingleOrDefaultAsync(item => item.Name.ToLower() == normalizedName, cancellationToken);
+
+        if (schoolYear is null)
+        {
+            schoolYear = new SchoolYear
+            {
+                Id = Guid.NewGuid(),
+                Name = name,
+                PlanningStart = command.PlanningStart,
+                PlanningEnd = command.PlanningEnd
+            };
+            dbContext.SchoolYears.Add(schoolYear);
+        }
+        else
+        {
+            var hasDatesOutsideRange = await dbContext.TopicAssignments.AnyAsync(
+                    item => item.TopicInstance.Topic.Course.SchoolYearId == schoolYear.Id &&
+                        (item.Date < command.PlanningStart || item.Date > command.PlanningEnd),
+                    cancellationToken) ||
+                await dbContext.CourseExams.AnyAsync(
+                    item => item.Course.SchoolYearId == schoolYear.Id &&
+                        (item.Date < command.PlanningStart || item.Date > command.PlanningEnd),
+                    cancellationToken) ||
+                await dbContext.GlobalDayMarkers.AnyAsync(
+                    item => item.SchoolYearId == schoolYear.Id &&
+                        (item.Date < command.PlanningStart || item.Date > command.PlanningEnd),
+                    cancellationToken);
+            if (hasDatesOutsideRange)
+            {
+                throw new PlanningConflictException(
+                    "The imported school-year range would exclude scheduled topics or fixed days.");
+            }
+
+            schoolYear.Name = name;
+            schoolYear.PlanningStart = command.PlanningStart;
+            schoolYear.PlanningEnd = command.PlanningEnd;
+        }
+
+        // Persist the parent inside the same transaction before validating child markers.
+        await SaveConflictSafeAsync(
+            "The school year conflicts with existing calendar data.", cancellationToken);
+
+        var importedDates = markersByDate.Keys.ToHashSet();
+        var existingMarkers = await dbContext.GlobalDayMarkers
+            .Where(item => item.SchoolYearId == schoolYear.Id && importedDates.Contains(item.Date))
+            .ToDictionaryAsync(item => item.Date, cancellationToken);
+        var newDates = importedDates.Except(existingMarkers.Keys).ToHashSet();
+
+        if (newDates.Count > 0)
+        {
+            await ValidateMarkerDatesAsync(schoolYear.Id, newDates, null, cancellationToken);
+            await ShiftForGlobalFixedDatesAsync(
+                schoolYear.Id, newDates, null, cancellationToken);
+        }
+
+        foreach (var (date, importedMarker) in markersByDate)
+        {
+            if (existingMarkers.TryGetValue(date, out var existingMarker))
+            {
+                existingMarker.Type = importedMarker.Type;
+                existingMarker.Label = NormalizeOptional(importedMarker.Label);
+            }
+            else
+            {
+                dbContext.GlobalDayMarkers.Add(new GlobalDayMarker
+                {
+                    Id = Guid.NewGuid(),
+                    SchoolYearId = schoolYear.Id,
+                    Date = date,
+                    Type = importedMarker.Type,
+                    Label = NormalizeOptional(importedMarker.Label)
+                });
+            }
+        }
+
+        await SaveConflictSafeAsync(
+            "The imported markers conflict with existing calendar data.", cancellationToken);
+        await CommitConflictSafeAsync(transaction, cancellationToken);
+        return CalendarService.ToDto(schoolYear);
+    }
+
     public async Task<IReadOnlyList<GlobalDayMarkerDto>> CreateGlobalMarkerRangeAsync(
         SaveGlobalDayMarkerRangeCommand command,
         CancellationToken cancellationToken = default)
@@ -1223,6 +1315,38 @@ public sealed class PlanningService(PlannerDbContext dbContext) : IPlanningServi
         if (command.Label?.Length > 200)
         {
             throw new ArgumentException("Marker label must not exceed 200 characters.");
+        }
+    }
+
+    private static void ValidateSchoolYearImport(ImportSchoolYearCommand command)
+    {
+        if (string.IsNullOrWhiteSpace(command.Name) || command.Name.Trim().Length > 100)
+        {
+            throw new ArgumentException(
+                "School-year name is required and must not exceed 100 characters.");
+        }
+
+        if (command.PlanningEnd < command.PlanningStart)
+        {
+            throw new ArgumentException("Planning end must be on or after planning start.");
+        }
+
+        var dates = new HashSet<DateOnly>();
+        foreach (var marker in command.Markers)
+        {
+            ValidateMarker(new SaveGlobalDayMarkerCommand(
+                Guid.Empty, marker.Date, marker.Type, marker.Label));
+            if (marker.Date < command.PlanningStart || marker.Date > command.PlanningEnd)
+            {
+                throw new ArgumentException(
+                    "Every imported marker must be inside the school-year range.");
+            }
+
+            if (!dates.Add(marker.Date))
+            {
+                throw new ArgumentException(
+                    $"The import contains more than one marker on {marker.Date:yyyy-MM-dd}.");
+            }
         }
     }
 

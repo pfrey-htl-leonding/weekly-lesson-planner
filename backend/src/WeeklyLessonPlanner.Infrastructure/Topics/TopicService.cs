@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using WeeklyLessonPlanner.Core.Planning;
 using WeeklyLessonPlanner.Core.Topics;
@@ -51,6 +52,97 @@ public sealed class TopicService(PlannerDbContext dbContext) : ITopicService
         dbContext.Topics.Add(topic);
         await dbContext.SaveChangesAsync(cancellationToken);
         return (await GetTopicAsync(topic.Id, cancellationToken))!;
+    }
+
+    public async Task<ImportTopicCatalogResultDto> ImportTopicCatalogAsync(
+        ImportTopicCatalogCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (command.Topics.Count == 0)
+        {
+            throw new ArgumentException("The topic import contains no topics.");
+        }
+
+        foreach (var item in command.Topics)
+        {
+            Validate(new SaveTopicCommand(command.CourseId, item.Heading, item.Description));
+        }
+
+        var duplicate = command.Topics
+            .GroupBy(item => item.Heading.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1)?.Key;
+        if (duplicate is not null)
+        {
+            throw new ArgumentException(
+                $"The import contains the topic heading '{duplicate}' more than once.");
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
+        if (!await dbContext.Courses.AnyAsync(
+                item => item.Id == command.CourseId, cancellationToken))
+        {
+            throw new KeyNotFoundException("Course not found.");
+        }
+
+        var existingTopics = await dbContext.Topics
+            .Where(item => item.CourseId == command.CourseId)
+            .ToListAsync(cancellationToken);
+        var updatedCount = 0;
+
+        foreach (var imported in command.Topics)
+        {
+            var heading = imported.Heading.Trim();
+            var matches = existingTopics
+                .Where(item => string.Equals(
+                    item.Heading.Trim(), heading, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length > 1)
+            {
+                throw new PlanningConflictException(
+                    $"More than one existing topic is named '{heading}'.");
+            }
+
+            if (matches.Length == 1)
+            {
+                matches[0].Heading = heading;
+                matches[0].Description = imported.Description?.Trim() ?? string.Empty;
+                updatedCount += 1;
+                continue;
+            }
+
+            var topic = new Topic
+            {
+                Id = Guid.NewGuid(),
+                CourseId = command.CourseId,
+                Heading = heading,
+                Description = imported.Description?.Trim() ?? string.Empty
+            };
+            topic.Instances.Add(new TopicInstance
+            {
+                Id = Guid.NewGuid(),
+                CourseId = command.CourseId
+            });
+            dbContext.Topics.Add(topic);
+            existingTopics.Add(topic);
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            throw new PlanningConflictException(
+                "The topic catalog changed concurrently. Refresh it and try the import again.",
+                exception);
+        }
+
+        return new(
+            command.Topics.Count,
+            updatedCount,
+            command.Topics.Count - updatedCount);
     }
 
     public async Task<TopicDto?> UpdateTopicAsync(

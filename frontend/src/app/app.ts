@@ -6,6 +6,7 @@ import { CdkDrag, CdkDragDrop, CdkDropList, DragDropModule } from '@angular/cdk/
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MAT_DIALOG_DATA, MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -14,7 +15,7 @@ import { MatRadioModule } from '@angular/material/radio';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { forkJoin, map, Observable, of, switchMap } from 'rxjs';
+import { forkJoin, map, Observable, of } from 'rxjs';
 import {
   AppConfig,
   CalendarApi,
@@ -47,10 +48,36 @@ import {
   writeNameDescriptionCsv,
   writeSchoolYearCsv,
 } from './core/data/name-description-csv';
+import {
+  CreateWorkspace,
+  WorkspaceApi,
+  WorkspaceContext,
+  WorkspaceSummary,
+} from './core/api/workspace-api';
 
 type PlannerDragData =
   | { kind: 'unplanned'; courseId: string; instance: TopicInstance }
   | { kind: 'scheduled'; courseId: string; topic: ScheduledTopic; sourceDate: string };
+
+@Component({
+  selector: 'app-delete-workspace-dialog',
+  imports: [MatButtonModule, MatDialogModule],
+  template: `
+    <h2 mat-dialog-title>Delete workspace?</h2>
+    <mat-dialog-content>
+      Deleting <strong>“{{ workspace.displayName }}”</strong> permanently removes all of its
+      school years, courses, topics, schedules, and settings.
+      <strong>This deletion is final and cannot be undone.</strong>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+      <button mat-button [mat-dialog-close]="false">Cancel</button>
+      <button mat-flat-button [mat-dialog-close]="true">Delete permanently</button>
+    </mat-dialog-actions>
+  `,
+})
+export class DeleteWorkspaceDialog {
+  readonly workspace = inject<WorkspaceSummary>(MAT_DIALOG_DATA);
+}
 
 @Component({
   selector: 'app-root',
@@ -61,6 +88,7 @@ type PlannerDragData =
     MatButtonModule,
     MatCardModule,
     MatCheckboxModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -77,6 +105,9 @@ export class App implements OnInit {
   private readonly api = inject(CalendarApi);
   private readonly topicApi = inject(TopicApi);
   private readonly planningApi = inject(PlanningApi);
+  private readonly workspaceApi = inject(WorkspaceApi);
+  private readonly workspaceContext = inject(WorkspaceContext);
+  private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly changeDetector = inject(ChangeDetectorRef);
 
@@ -84,6 +115,11 @@ export class App implements OnInit {
   readonly markerTypes = GlobalDayMarkerType;
   readonly states = EffectiveDayState;
   readonly allCoursesOptionValue = '__all_courses__';
+
+  workspaces: WorkspaceSummary[] = [];
+  activeWorkspaceSlug = '';
+  workspaceDraft: CreateWorkspace = { displayName: '', slug: '' };
+  workspaceSlugEdited = false;
 
   config: AppConfig | null = null;
   schoolYears: SchoolYear[] = [];
@@ -142,10 +178,132 @@ export class App implements OnInit {
   }
 
   ngOnInit(): void {
-    this.reloadAll();
+    this.loadWorkspaces();
+  }
+
+  readyWorkspaces(): WorkspaceSummary[] {
+    return this.workspaces.filter(workspace => workspace.status === 'ready');
+  }
+
+  loadWorkspaces(): void {
+    this.busy = true;
+    this.workspaceApi.list().subscribe({
+      next: workspaces => {
+        this.workspaces = workspaces;
+        const ready = this.readyWorkspaces();
+        const routeSlug = this.workspaceSlugFromLocation();
+        const rememberedSlug = this.readRememberedWorkspace();
+        const selected = ready.find(workspace => workspace.slug === routeSlug)
+          ?? ready.find(workspace => workspace.slug === rememberedSlug)
+          ?? (ready.length === 1 ? ready[0] : undefined);
+
+        if (!selected) {
+          this.activeWorkspaceSlug = '';
+          this.busy = false;
+          this.changeDetector.markForCheck();
+          return;
+        }
+
+        this.activateWorkspace(selected, true);
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  selectWorkspace(slug: string): void {
+    if (!slug || slug === this.activeWorkspaceSlug) return;
+    const workspace = this.readyWorkspaces().find(item => item.slug === slug);
+    if (!workspace) {
+      this.fail('The selected workspace is not ready.');
+      return;
+    }
+
+    this.rememberWorkspace(workspace.slug);
+    globalThis.location.assign(`/w/${encodeURIComponent(workspace.slug)}`);
+  }
+
+  createWorkspace(): void {
+    if (!this.workspaceDraft.displayName.trim() || !this.workspaceDraft.slug.trim()) {
+      this.fail('Enter a workspace name and key.');
+      return;
+    }
+
+    this.busy = true;
+    this.workspaceApi.create({
+      displayName: this.workspaceDraft.displayName.trim(),
+      slug: this.workspaceDraft.slug.trim().toLowerCase(),
+    }).subscribe({
+      next: workspace => {
+        this.rememberWorkspace(workspace.slug);
+        globalThis.location.assign(`/w/${encodeURIComponent(workspace.slug)}`);
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  suggestWorkspaceSlug(): void {
+    if (this.workspaceSlugEdited) return;
+    this.workspaceDraft.slug = this.workspaceDraft.displayName
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/['’]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40)
+      .replace(/-+$/g, '');
+  }
+
+  markWorkspaceSlugEdited(): void {
+    this.workspaceSlugEdited = true;
+  }
+
+  canCreateWorkspace(): boolean {
+    return !this.busy &&
+      this.workspaceDraft.displayName.trim().length >= 1 &&
+      this.workspaceDraft.displayName.trim().length <= 100 &&
+      /^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(this.workspaceDraft.slug.trim()) &&
+      !['api', 'health', 'assets', 'admin', 'new'].includes(this.workspaceDraft.slug.trim());
+  }
+
+  retryWorkspace(workspace: WorkspaceSummary): void {
+    this.busy = true;
+    this.workspaceApi.retry(workspace.slug).subscribe({
+      next: retried => {
+        this.rememberWorkspace(retried.slug);
+        globalThis.location.assign(`/w/${encodeURIComponent(retried.slug)}`);
+      },
+      error: error => this.handleError(error),
+    });
+  }
+
+  deleteWorkspace(): void {
+    const workspace = this.readyWorkspaces().find(
+      item => item.slug === this.activeWorkspaceSlug);
+    if (!workspace) {
+      this.fail('The active workspace is not available for deletion.');
+      return;
+    }
+
+    this.dialog.open(DeleteWorkspaceDialog, {
+      data: workspace,
+      disableClose: true,
+      maxWidth: '32rem',
+    }).afterClosed().subscribe(confirmed => {
+      if (!confirmed) return;
+      this.busy = true;
+      this.workspaceApi.delete(workspace.slug).subscribe({
+        next: () => {
+          this.forgetWorkspace(workspace.slug);
+          globalThis.location.assign('/');
+        },
+        error: error => this.handleError(error),
+      });
+    });
   }
 
   reloadAll(): void {
+    if (!this.activeWorkspaceSlug) return;
     this.busy = true;
     forkJoin({
       config: this.api.getConfig(),
@@ -173,6 +331,49 @@ export class App implements OnInit {
       },
       error: error => this.handleError(error),
     });
+  }
+
+  private activateWorkspace(workspace: WorkspaceSummary, replaceUrl: boolean): void {
+    this.activeWorkspaceSlug = workspace.slug;
+    this.workspaceContext.setActive(workspace.slug);
+    this.rememberWorkspace(workspace.slug);
+    const workspaceUrl = `/w/${encodeURIComponent(workspace.slug)}`;
+    if (replaceUrl && globalThis.location.pathname !== workspaceUrl) {
+      globalThis.history.replaceState(null, '', workspaceUrl);
+    }
+    this.reloadAll();
+  }
+
+  private workspaceSlugFromLocation(): string {
+    const match = /^\/w\/([a-z][a-z0-9-]{1,38}[a-z0-9])\/?$/.exec(
+      globalThis.location.pathname);
+    return match?.[1] ?? '';
+  }
+
+  private readRememberedWorkspace(): string {
+    try {
+      return globalThis.localStorage.getItem('weekly-lesson-planner.workspace') ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  private rememberWorkspace(slug: string): void {
+    try {
+      globalThis.localStorage.setItem('weekly-lesson-planner.workspace', slug);
+    } catch {
+      // The URL remains authoritative when local storage is unavailable.
+    }
+  }
+
+  private forgetWorkspace(slug: string): void {
+    try {
+      if (globalThis.localStorage.getItem('weekly-lesson-planner.workspace') === slug) {
+        globalThis.localStorage.removeItem('weekly-lesson-planner.workspace');
+      }
+    } catch {
+      // The catalog is authoritative when local storage is unavailable.
+    }
   }
 
   reloadCalendar(): void {
@@ -870,6 +1071,10 @@ export class App implements OnInit {
       this.fail('Select a course before importing topics.');
       return;
     }
+    if (this.dataTransferKind === 'courses' && !this.selectedSchoolYearId) {
+      this.fail('Select a school year before importing courses.');
+      return;
+    }
 
     let records;
     try {
@@ -900,57 +1105,32 @@ export class App implements OnInit {
       return;
     }
 
-    let updatedCount = 0;
-    const requests = this.dataTransferKind === 'topics'
-      ? records.map(record => {
-          const existing = this.topics.find(topic =>
-            this.normalizeName(topic.heading) === this.normalizeName(record.name));
-          if (existing) {
-            updatedCount += 1;
-            return this.topicApi.updateTopic(existing.id, {
-              courseId: this.selectedCourseId,
-              heading: record.name,
-              description: record.description,
-            });
-          }
-          return this.topicApi.createTopic({
-            courseId: this.selectedCourseId,
+    const request = this.dataTransferKind === 'topics'
+      ? this.topicApi.importTopicCatalog({
+          courseId: this.selectedCourseId,
+          topics: records.map(record => ({
             heading: record.name,
             description: record.description,
-          });
+          })),
         })
-      : records.map(record => {
-          const existing = this.coursesForSelectedSchoolYear().find(course =>
-            this.normalizeName(course.name) === this.normalizeName(record.name));
-          if (existing) {
-            updatedCount += 1;
-            return this.api.updateCourse(existing.id, {
-              schoolYearId: existing.schoolYearId,
-              name: record.name,
-              description: record.description,
-              weekdays: [...existing.weekdays],
-            });
-          }
-          return this.api.createCourse({
-            schoolYearId: this.selectedSchoolYearId,
-            name: record.name,
-            description: record.description,
-            weekdays: [...(this.config?.visibleWeekdays ?? [
-              IsoWeekday.Monday,
-              IsoWeekday.Tuesday,
-              IsoWeekday.Wednesday,
-              IsoWeekday.Thursday,
-              IsoWeekday.Friday,
-            ])],
-          });
+      : this.api.importCourseCatalog({
+          schoolYearId: this.selectedSchoolYearId,
+          defaultWeekdays: [...(this.config?.visibleWeekdays ?? [
+            IsoWeekday.Monday,
+            IsoWeekday.Tuesday,
+            IsoWeekday.Wednesday,
+            IsoWeekday.Thursday,
+            IsoWeekday.Friday,
+          ])],
+          courses: records,
         });
 
     this.busy = true;
-    forkJoin(requests).subscribe({
-      next: () => {
-        const createdCount = records.length - updatedCount;
+    request.subscribe({
+      next: result => {
         this.succeed(
-          `Imported ${records.length} ${this.dataTransferKind}: ${updatedCount} updated, ${createdCount} created.`,
+          `Imported ${result.importedCount} ${this.dataTransferKind}: ` +
+          `${result.updatedCount} updated, ${result.createdCount} created.`,
         );
         if (this.dataTransferKind === 'topics') {
           this.reloadCalendar();
@@ -971,38 +1151,17 @@ export class App implements OnInit {
       return;
     }
 
-    const existingSchoolYear = this.schoolYears.find(item =>
-      this.normalizeName(item.name) === this.normalizeName(imported.name));
-    const schoolYearRequest = existingSchoolYear
-      ? this.api.updateSchoolYear(existingSchoolYear.id, {
-          name: imported.name,
-          planningStart: imported.planningStart,
-          planningEnd: imported.planningEnd,
-        })
-      : this.api.createSchoolYear({
-          name: imported.name,
-          planningStart: imported.planningStart,
-          planningEnd: imported.planningEnd,
-        });
-
     this.busy = true;
-    schoolYearRequest.pipe(
-      switchMap(schoolYear => this.api.getMarkers(schoolYear.id).pipe(
-        switchMap(existingMarkers => {
-          const requests = imported.markers.map(marker => {
-            const command = {
-              schoolYearId: schoolYear.id,
-              date: marker.date,
-              type: marker.type === 'Holiday' ? GlobalDayMarkerType.Holiday : GlobalDayMarkerType.Event,
-              label: marker.label || null,
-            };
-            const existing = existingMarkers.find(item => item.date === marker.date);
-            return existing ? this.api.updateMarker(existing.id, command) : this.api.createMarker(command);
-          });
-          return (requests.length > 0 ? forkJoin(requests) : of([])).pipe(map(() => schoolYear));
-        }),
-      )),
-    ).subscribe({
+    this.api.importSchoolYear({
+      name: imported.name,
+      planningStart: imported.planningStart,
+      planningEnd: imported.planningEnd,
+      markers: imported.markers.map(marker => ({
+        date: marker.date,
+        type: marker.type === 'Holiday' ? GlobalDayMarkerType.Holiday : GlobalDayMarkerType.Event,
+        label: marker.label || null,
+      })),
+    }).subscribe({
       next: schoolYear => {
         this.selectedSchoolYearId = schoolYear.id;
         this.selectedCourseIds = [];

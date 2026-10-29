@@ -11,6 +11,9 @@ public interface ICalendarService
     Task<IReadOnlyList<CourseDto>> GetCoursesAsync(Guid? schoolYearId = null, CancellationToken cancellationToken = default);
     Task<CourseDto?> GetCourseAsync(Guid id, CancellationToken cancellationToken = default);
     Task<CourseDto> CreateCourseAsync(SaveCourseCommand command, CancellationToken cancellationToken = default);
+    Task<ImportCourseCatalogResultDto> ImportCourseCatalogAsync(
+        ImportCourseCatalogCommand command,
+        CancellationToken cancellationToken = default);
     Task<CourseDto?> UpdateCourseAsync(Guid id, SaveCourseCommand command, CancellationToken cancellationToken = default);
     Task<bool> DeleteCourseAsync(Guid id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<GlobalDayMarkerDto>> GetGlobalMarkersAsync(Guid schoolYearId, CancellationToken cancellationToken = default);

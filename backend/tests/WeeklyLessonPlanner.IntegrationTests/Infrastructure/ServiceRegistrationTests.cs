@@ -5,6 +5,7 @@ using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Core.Topics;
 using WeeklyLessonPlanner.Infrastructure;
 using WeeklyLessonPlanner.Infrastructure.Persistence;
+using WeeklyLessonPlanner.Infrastructure.Workspaces;
 
 namespace WeeklyLessonPlanner.IntegrationTests.Infrastructure;
 
@@ -27,6 +28,13 @@ public sealed class ServiceRegistrationTests
 
         using var provider = services.BuildServiceProvider(validateScopes: true);
         using var scope = provider.CreateScope();
+        scope.ServiceProvider.GetRequiredService<WorkspaceContextAccessor>().Set(new(
+            Guid.NewGuid(),
+            "test-workspace",
+            "Test workspace",
+            $"planner_{Guid.NewGuid():N}",
+            WorkspaceStatus.Ready,
+            null));
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<PlannerDbContext>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<IPlanningService>());

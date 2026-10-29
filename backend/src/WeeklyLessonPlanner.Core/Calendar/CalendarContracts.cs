@@ -49,6 +49,17 @@ public sealed record SaveSchoolYearCommand(
     DateOnly PlanningStart,
     DateOnly PlanningEnd);
 
+public sealed record ImportSchoolYearMarkerCommand(
+    DateOnly Date,
+    GlobalDayMarkerType Type,
+    string? Label);
+
+public sealed record ImportSchoolYearCommand(
+    string Name,
+    DateOnly PlanningStart,
+    DateOnly PlanningEnd,
+    IReadOnlyList<ImportSchoolYearMarkerCommand> Markers);
+
 public sealed record CourseDto(
     Guid Id,
     Guid SchoolYearId,
@@ -61,6 +72,18 @@ public sealed record SaveCourseCommand(
     string Name,
     string Description,
     IReadOnlyList<IsoWeekday> Weekdays);
+
+public sealed record ImportCourseCatalogItemCommand(string Name, string Description);
+
+public sealed record ImportCourseCatalogCommand(
+    Guid SchoolYearId,
+    IReadOnlyList<IsoWeekday> DefaultWeekdays,
+    IReadOnlyList<ImportCourseCatalogItemCommand> Courses);
+
+public sealed record ImportCourseCatalogResultDto(
+    int ImportedCount,
+    int UpdatedCount,
+    int CreatedCount);
 
 public sealed record GlobalDayMarkerDto(
     Guid Id,

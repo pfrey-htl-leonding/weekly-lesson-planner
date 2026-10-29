@@ -12,7 +12,16 @@ docker compose --env-file stack/.env -f stack/compose.yaml up --build -d
 
 Open `http://localhost:8080`. The API is also exposed on loopback at `http://localhost:5080` for development diagnostics.
 
-The API applies committed EF Core migrations before it begins accepting traffic. This startup mode assumes one API replica; use a dedicated migration job before scaling the API horizontally.
+The application stores each planner in an independent PostgreSQL schema. The
+active workspace appears in the browser URL as `/w/<workspace-key>`. This is
+data separation only, not authentication: every visitor can access every
+workspace and create new ones (up to the configured limit).
+
+The API applies committed EF Core migrations to every ready workspace before
+it begins accepting traffic. On the first workspace-aware startup, legacy data
+in `public` is moved transactionally into the `pfrey` workspace. This startup
+mode assumes one API replica; use a dedicated migration job before scaling the
+API horizontally.
 
 ## Health and shutdown
 
@@ -44,6 +53,7 @@ docker compose --env-file stack/.env -f stack/compose.yaml cp db:/backups/<backu
 ```
 
 The hook runs for `stop`, `restart`, and `down` as long as Docker allows the
-container to stop gracefully. It cannot run after a host crash, power loss,
+container to stop gracefully. Each export contains the control catalog and all
+workspace schemas. It cannot run after a host crash, power loss,
 `docker kill`, or an out-of-memory termination. Running `down --volumes` also
 deletes both the database and backup volumes after the export is created.

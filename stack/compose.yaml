@@ -33,6 +33,9 @@ services:
       ConnectionStrings__PlannerDatabase: >-
         Host=db;Port=5432;Database=${POSTGRES_DB:-weekly_lesson_planner};Username=${POSTGRES_USER:-weekly_lesson_planner};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in stack/.env}
       Database__ApplyMigrations: "true"
+      Workspaces__AllowCreate: "true"
+      Workspaces__MaximumCount: "25"
+      Workspaces__MaximumPoolSizePerWorkspace: "5"
     depends_on:
       db:
         condition: service_healthy

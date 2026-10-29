@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using WeeklyLessonPlanner.Core.Planning;
+using WeeklyLessonPlanner.Infrastructure.Workspaces;
 
 namespace WeeklyLessonPlanner.Api;
 
@@ -19,6 +20,8 @@ public sealed class ApiExceptionHandler(
             ArgumentException => (StatusCodes.Status400BadRequest, "Invalid request"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
             PlanningConflictException => (StatusCodes.Status409Conflict, "Planning conflict"),
+            WorkspaceValidationException => (StatusCodes.Status400BadRequest, "Invalid workspace"),
+            WorkspaceConflictException => (StatusCodes.Status409Conflict, "Workspace conflict"),
             DbUpdateConcurrencyException => (StatusCodes.Status409Conflict, "Concurrent update"),
             _ => (StatusCodes.Status500InternalServerError, "Unexpected error")
         };

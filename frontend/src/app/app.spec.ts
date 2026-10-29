@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
+import { MatDialog } from '@angular/material/dialog';
 import { MatSelect } from '@angular/material/select';
 import { Observable, of, Subject } from 'rxjs';
-import { App } from './app';
+import { App, DeleteWorkspaceDialog } from './app';
 import {
   CalendarApi,
   CalendarView,
@@ -11,6 +12,7 @@ import {
 } from './core/api/calendar-api';
 import { SaveTopic, TopicApi, TopicDefinition, TopicInstance } from './core/api/topic-api';
 import { PlanningApi, PlanningImpact } from './core/api/planning-api';
+import { WorkspaceApi, WorkspaceContext } from './core/api/workspace-api';
 
 const calendarApi = {
   getConfig: () => of({
@@ -20,6 +22,15 @@ const calendarApi = {
   getSchoolYears: () => of([{
     id: 'school-year', name: '2026/27', planningStart: '2026-09-01', planningEnd: '2027-06-30',
   }]),
+  importSchoolYear: vi.fn(command => of({
+    id: 'imported-school-year',
+    name: command.name,
+    planningStart: command.planningStart,
+    planningEnd: command.planningEnd,
+  })),
+  importCourseCatalog: vi.fn(() => of({
+    importedCount: 2, updatedCount: 1, createdCount: 1,
+  })),
   getCourses: () => of([]),
   getMarkers: () => of([]),
   getExams: () => of([]),
@@ -45,6 +56,9 @@ const topicApi = {
   getUnplannedInstances: (): Observable<TopicInstance[]> => of([]),
   createTopic: vi.fn((command: SaveTopic) => of(toTopic('created', command))),
   updateTopic: vi.fn((id: string, command: SaveTopic) => of(toTopic(id, command))),
+  importTopicCatalog: vi.fn(() => of({
+    importedCount: 1, updatedCount: 1, createdCount: 0,
+  })),
   copyScheduledInstance: vi.fn(() => of({
     id: 'copy', topicId: 'topic', courseId: 'course', heading: 'Trees', description: '',
   })),
@@ -109,6 +123,24 @@ const planningApi = {
   })),
 };
 
+const workspaceApi = {
+  list: () => of([{
+    id: 'workspace-id',
+    slug: 'pfrey',
+    displayName: 'pfrey',
+    status: 'ready' as const,
+    provisioningError: null,
+  }]),
+  create: vi.fn(),
+  retry: vi.fn(),
+  delete: vi.fn(() => of(undefined)),
+};
+
+const workspaceContext = {
+  slug: '',
+  setActive: vi.fn(),
+};
+
 const eligibleDay = {
   date: '2026-09-07',
   weekday: IsoWeekday.Monday,
@@ -140,6 +172,8 @@ describe('App', () => {
         { provide: CalendarApi, useValue: calendarApi },
         { provide: TopicApi, useValue: topicApi },
         { provide: PlanningApi, useValue: planningApi },
+        { provide: WorkspaceApi, useValue: workspaceApi },
+        { provide: WorkspaceContext, useValue: workspaceContext },
       ],
     }).compileComponents();
   });
@@ -153,6 +187,46 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Weekly Lesson Planner');
+  });
+
+  it('warns that workspace deletion is final in a confirmation dialog', () => {
+    const dialog = TestBed.inject(MatDialog);
+    const reference = dialog.open(DeleteWorkspaceDialog, {
+      data: {
+        id: 'workspace-id',
+        slug: 'pfrey',
+        displayName: 'pfrey',
+        status: 'ready',
+        provisioningError: null,
+      },
+    });
+
+    expect(document.body.textContent).toContain('This deletion is final and cannot be undone.');
+    expect(document.body.textContent).toContain('Delete permanently');
+    reference.close();
+  });
+
+  it('suggests a valid workspace key until the key is edited', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.workspaceDraft.displayName = 'Änne’s Planner';
+
+    component.suggestWorkspaceSlug();
+
+    expect(component.workspaceDraft.slug).toBe('annes-planner');
+    expect(component.canCreateWorkspace()).toBe(true);
+    component.markWorkspaceSlugEdited();
+    component.workspaceDraft.displayName = 'Different Name';
+    component.suggestWorkspaceSlug();
+    expect(component.workspaceDraft.slug).toBe('annes-planner');
+  });
+
+  it('rejects reserved workspace keys in the create form', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.workspaceDraft = { displayName: 'API', slug: 'api' };
+
+    expect(component.canCreateWorkspace()).toBe(false);
   });
 
   it('shows the selected course planning summary above the unplanned topics', async () => {
@@ -398,7 +472,7 @@ describe('App', () => {
     expect(fixture.nativeElement.textContent).toContain('3 Aug');
   });
 
-  it('updates an existing topic by case-insensitive name during import', () => {
+  it('sends a topic catalog through one atomic import request', () => {
     const fixture = TestBed.createComponent(App);
     fixture.componentInstance.selectedCourseId = 'course';
     fixture.componentInstance.topics = [toTopic('existing', {
@@ -411,12 +485,13 @@ describe('App', () => {
 
     fixture.componentInstance.importData();
 
-    expect(topicApi.updateTopic).toHaveBeenCalledWith('existing', {
+    expect(topicApi.importTopicCatalog).toHaveBeenCalledWith({
       courseId: 'course',
-      heading: 'trees',
-      description: 'Updated description',
+      topics: [{
+        heading: 'trees',
+        description: 'Updated description',
+      }],
     });
-    expect(topicApi.createTopic).not.toHaveBeenCalled();
   });
 
   it('exports only scheduled topics with course, date, and topic', () => {
@@ -483,6 +558,55 @@ describe('App', () => {
       '2026/27;2026-09-01;2027-06-30;;;',
       '2026/27;2026-09-01;2027-06-30;2026-10-26;Holiday;National holiday',
     ].join('\n'));
+  });
+
+  it('sends a school year and all markers through one atomic import request', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.dataTransferKind = 'schoolYear';
+    component.dataTransferText = [
+      'School year;Planning start;Planning end;Date;Type;Label',
+      '2027/28;2027-09-01;2028-06-30;;;',
+      '2027/28;2027-09-01;2028-06-30;2027-10-26;Holiday;National holiday',
+      '2027/28;2027-09-01;2028-06-30;2027-12-23;Event;Last school day',
+    ].join('\n');
+
+    component.importData();
+
+    expect(calendarApi.importSchoolYear).toHaveBeenCalledWith({
+      name: '2027/28',
+      planningStart: '2027-09-01',
+      planningEnd: '2028-06-30',
+      markers: [
+        { date: '2027-10-26', type: GlobalDayMarkerType.Holiday, label: 'National holiday' },
+        { date: '2027-12-23', type: GlobalDayMarkerType.Event, label: 'Last school day' },
+      ],
+    });
+  });
+
+  it('sends a course catalog through one atomic import request', () => {
+    const fixture = TestBed.createComponent(App);
+    const component = fixture.componentInstance;
+    component.selectedSchoolYearId = 'school-year';
+    component.dataTransferKind = 'courses';
+    component.dataTransferText = 'Algorithms;Trees\nDatabases;SQL';
+
+    component.importData();
+
+    expect(calendarApi.importCourseCatalog).toHaveBeenCalledWith({
+      schoolYearId: 'school-year',
+      defaultWeekdays: [
+        IsoWeekday.Monday,
+        IsoWeekday.Tuesday,
+        IsoWeekday.Wednesday,
+        IsoWeekday.Thursday,
+        IsoWeekday.Friday,
+      ],
+      courses: [
+        { name: 'Algorithms', description: 'Trees' },
+        { name: 'Databases', description: 'SQL' },
+      ],
+    });
   });
 
   it('sends imported planned topics to the transactional schedule endpoint', () => {

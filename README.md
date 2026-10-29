@@ -4,7 +4,9 @@
 
 This is a vibe coding experiment. Using the prompt below "Current situation", I let AI code the tool, mostly using OpenAI Codex. This is vibe coded AND vibe tested AND NOT human reviewed!! So if in doubt, read the code before you start the stack.
 
-It is running as a local-only tool. There is no concept of a user or login. If you want to deploy this across a site, you'd have add your specific user management and extend the data model accordingly.
+It is running as a local-only tool. It supports multiple independent workspaces,
+but there is no login or access control: everyone who can reach the application
+can open and change every workspace. Do not expose it to untrusted networks.
 
 ## Getting and running it
 
@@ -29,7 +31,12 @@ Open `stack/.env` and replace `replace-with-a-local-secret` with a private passw
 docker compose --env-file stack/.env -f stack/compose.yaml up --build -d
 ```
 
-Open <http://localhost:8080> in a browser. To stop the application without deleting its database, run:
+Open <http://localhost:8080> in a browser. The selected workspace is part of
+the URL, for example `http://localhost:8080/w/pfrey`. Use the header selector
+to switch workspaces, or create an empty workspace in **Data import/export**.
+The same administration section can permanently delete the active workspace
+after an explicit confirmation. Workspace deletion cannot be undone.
+To stop the application without deleting its database, run:
 
 ```bash
 docker compose --env-file stack/.env -f stack/compose.yaml down
@@ -46,11 +53,12 @@ See [stack/README.md](./stack/README.md) for health checks, ports, database back
 
 ## Getting started
 
-1. In **School years**, create the planning window by entering its name, start date, and end date.
-2. In **Courses**, add a course for that school year and select its teaching days.
-3. In **Global holiday**, add holidays and events for the school year. Select one course in **Course view** and use **Course exam** to add its exams.
-4. Select the course in **Course view**, then add its topics in **Topic management**. Topic headings that start with a number followed by a space are sorted numerically before other topics—for example, `2 Arrays` comes before `10 Trees`.
-5. In **Data import/export**, import or export semicolon-separated CSV. A school-year export contains its date range and holidays/events. A planned-course-topics export contains only scheduled topics, with course, date, topic, and description; exactly one course must be selected. The original course and topic catalog formats (`name;optional description`) remain available.
+1. Select a workspace, or create one if this is a new installation.
+2. In **School years**, create the planning window by entering its name, start date, and end date.
+3. In **Courses**, add a course for that school year and select its teaching days.
+4. In **Global holiday**, add holidays and events for the school year. Select one course in **Course view** and use **Course exam** to add its exams.
+5. Select the course in **Course view**, then add its topics in **Topic management**. Topic headings that start with a number followed by a space are sorted numerically before other topics—for example, `2 Arrays` comes before `10 Trees`.
+6. In **Data import/export**, import or export semicolon-separated CSV. A school-year export contains its date range and holidays/events. A planned-course-topics export contains only scheduled topics, with course, date, topic, and description; exactly one course must be selected. The original course and topic catalog formats (`name;optional description`) remain available.
 
 **Edit shifts schedule** controls both kinds of schedule adjustment. When enabled, inserting pushes an occupied topic and the following topics forward, while deleting pulls following topics backward to close the gap. When disabled, inserting makes the overwritten topic unplanned and deleting leaves a gap.
 

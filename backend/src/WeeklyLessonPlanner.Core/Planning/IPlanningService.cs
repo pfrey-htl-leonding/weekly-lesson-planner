@@ -35,6 +35,9 @@ public interface IPlanningService
     Task<CourseRolloverResultDto> RollOverCourseAsync(
         CourseRolloverCommand command,
         CancellationToken cancellationToken = default);
+    Task<SchoolYearDto> ImportSchoolYearAsync(
+        ImportSchoolYearCommand command,
+        CancellationToken cancellationToken = default);
     Task<GlobalDayMarkerDto> CreateGlobalMarkerAsync(
         SaveGlobalDayMarkerCommand command,
         CancellationToken cancellationToken = default);

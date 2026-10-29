@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using WeeklyLessonPlanner.Core.Calendar;
 using WeeklyLessonPlanner.Core.Planning;
@@ -140,6 +141,103 @@ public sealed class CalendarService(PlannerDbContext dbContext) : ICalendarServi
         dbContext.Courses.Add(course);
         await dbContext.SaveChangesAsync(cancellationToken);
         return ToDto(course);
+    }
+
+    public async Task<ImportCourseCatalogResultDto> ImportCourseCatalogAsync(
+        ImportCourseCatalogCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (command.Courses.Count == 0)
+        {
+            throw new ArgumentException("The course import contains no courses.");
+        }
+
+        var defaultWeekdays = NormalizeWeekdays(command.DefaultWeekdays);
+        if (defaultWeekdays.Count == 0)
+        {
+            throw new ArgumentException("Select at least one default teaching weekday.");
+        }
+
+        foreach (var item in command.Courses)
+        {
+            ValidateCourse(new SaveCourseCommand(
+                command.SchoolYearId,
+                item.Name,
+                item.Description,
+                defaultWeekdays));
+        }
+
+        var duplicate = command.Courses
+            .GroupBy(item => item.Name.Trim(), StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(group => group.Count() > 1)?.Key;
+        if (duplicate is not null)
+        {
+            throw new ArgumentException($"The import contains the course name '{duplicate}' more than once.");
+        }
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(
+            IsolationLevel.Serializable, cancellationToken);
+        if (!await dbContext.SchoolYears.AnyAsync(
+                item => item.Id == command.SchoolYearId, cancellationToken))
+        {
+            throw new KeyNotFoundException("School year not found.");
+        }
+
+        var existingCourses = await dbContext.Courses
+            .Include(item => item.Weekdays)
+            .Where(item => item.SchoolYearId == command.SchoolYearId)
+            .ToListAsync(cancellationToken);
+        var updatedCount = 0;
+
+        foreach (var imported in command.Courses)
+        {
+            var name = imported.Name.Trim();
+            var matches = existingCourses
+                .Where(item => string.Equals(
+                    item.Name.Trim(), name, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (matches.Length > 1)
+            {
+                throw new PlanningConflictException(
+                    $"More than one existing course is named '{name}'.");
+            }
+
+            if (matches.Length == 1)
+            {
+                matches[0].Name = name;
+                matches[0].Description = imported.Description?.Trim() ?? string.Empty;
+                updatedCount += 1;
+                continue;
+            }
+
+            var course = new Course
+            {
+                Id = Guid.NewGuid(),
+                SchoolYearId = command.SchoolYearId,
+                Name = name,
+                Description = imported.Description?.Trim() ?? string.Empty,
+                Weekdays = defaultWeekdays.Select(day => new CourseWeekday { Weekday = day }).ToList()
+            };
+            dbContext.Courses.Add(course);
+            existingCourses.Add(course);
+        }
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateException exception)
+        {
+            throw new PlanningConflictException(
+                "The course catalog changed concurrently. Refresh it and try the import again.",
+                exception);
+        }
+
+        return new(
+            command.Courses.Count,
+            updatedCount,
+            command.Courses.Count - updatedCount);
     }
 
     public async Task<CourseDto?> UpdateCourseAsync(

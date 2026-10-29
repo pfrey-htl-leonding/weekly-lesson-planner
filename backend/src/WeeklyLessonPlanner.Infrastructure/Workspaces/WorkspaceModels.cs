@@ -45,9 +45,10 @@ public sealed record WorkspaceDatabaseSettings(
     string OwnerConnectionString,
     int MaximumCount,
     int MaximumPoolSizePerWorkspace,
-    bool AllowCreate);
+    bool AllowCreate,
+    string LegacyWorkspaceSlug,
+    string LegacyWorkspaceDisplayName);
 
 public sealed class WorkspaceValidationException(string message) : Exception(message);
 
 public sealed class WorkspaceConflictException(string message) : Exception(message);
-

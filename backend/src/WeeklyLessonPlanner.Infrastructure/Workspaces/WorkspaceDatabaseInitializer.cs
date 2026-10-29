@@ -93,7 +93,7 @@ public sealed class WorkspaceDatabaseInitializer(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task AdoptPublicPlannerAsync(
+    private async Task AdoptPublicPlannerAsync(
         NpgsqlConnection connection,
         CancellationToken cancellationToken)
     {
@@ -114,6 +114,10 @@ public sealed class WorkspaceDatabaseInitializer(
             throw new InvalidOperationException(
                 "Planner tables still exist in public although the workspace catalog is not empty.");
         }
+
+        var legacyWorkspaceSlug = settings.LegacyWorkspaceSlug.Trim().ToLowerInvariant();
+        var legacyWorkspaceDisplayName = settings.LegacyWorkspaceDisplayName.Trim();
+        WorkspaceCatalog.Validate(legacyWorkspaceDisplayName, legacyWorkspaceSlug);
 
         var workspaceId = Guid.NewGuid();
         var schemaName = WorkspaceConnections.GenerateSchemaName(workspaceId);
@@ -147,10 +151,12 @@ public sealed class WorkspaceDatabaseInitializer(
             """
             INSERT INTO planner_control.workspaces
                 (id, slug, display_name, schema_name, status, created_at, updated_at)
-            VALUES ($1, 'pfrey', 'pfrey', $2, $3, now(), now())
+            VALUES ($1, $2, $3, $4, $5, now(), now())
             """, connection, transaction))
         {
             insert.Parameters.AddWithValue(workspaceId);
+            insert.Parameters.AddWithValue(legacyWorkspaceSlug);
+            insert.Parameters.AddWithValue(legacyWorkspaceDisplayName);
             insert.Parameters.AddWithValue(schemaName);
             insert.Parameters.AddWithValue((short)WorkspaceStatus.Ready);
             await insert.ExecuteNonQueryAsync(cancellationToken);

@@ -343,7 +343,7 @@ public sealed partial class WorkspaceCatalog(
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static void Validate(string displayName, string slug)
+    internal static void Validate(string displayName, string slug)
     {
         if (string.IsNullOrWhiteSpace(displayName) || displayName.Length > 100)
         {

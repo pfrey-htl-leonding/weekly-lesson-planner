@@ -38,12 +38,18 @@ public static class DependencyInjection
             configuration.GetValue("Workspaces:MaximumCount", 25), 1, 1000);
         var maximumPoolSize = Math.Clamp(
             configuration.GetValue("Workspaces:MaximumPoolSizePerWorkspace", 5), 1, 100);
+        var legacyWorkspaceSlug =
+            configuration.GetValue("Workspaces:LegacyWorkspaceSlug", "pfrey") ?? "pfrey";
+        var legacyWorkspaceDisplayName =
+            configuration.GetValue("Workspaces:LegacyWorkspaceDisplayName", "pfrey") ?? "pfrey";
         var settings = new WorkspaceDatabaseSettings(
             runtimeConnectionString,
             ownerConnectionString,
             maximumCount,
             maximumPoolSize,
-            configuration.GetValue("Workspaces:AllowCreate", true));
+            configuration.GetValue("Workspaces:AllowCreate", true),
+            legacyWorkspaceSlug,
+            legacyWorkspaceDisplayName);
 
         services.AddSingleton(settings);
         services.AddSingleton<WorkspaceCatalog>();
